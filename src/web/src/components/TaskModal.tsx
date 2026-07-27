@@ -125,9 +125,10 @@ export function TaskModal(props: {
     if (logs) openDoc(logs);
   }, [docsLoading, docs, activeDoc, task.column, openDoc]);
 
-  // 复制执行命令到剪贴板：优先 clipboard API，失败回退 textarea + execCommand
+  // 复制执行命令到剪贴板：命令带任务名，用 # 分隔符确保名称不影响 run 解析
+  // （kanban run 用首个 4 位 ID 定位任务，# 后是展示性说明，agent 一眼可辨）
   const copyRunCommand = useCallback(async () => {
-    const cmd = `/kanban run ${task.id}`;
+    const cmd = `/kanban run ${task.id} # ${task.name}`;
     let ok = false;
     try {
       await navigator.clipboard.writeText(cmd);
@@ -149,7 +150,7 @@ export function TaskModal(props: {
       setCopied(true);
       setTimeout(() => setCopied(false), 2000);
     }
-  }, [task.id]);
+  }, [task.id, task.name]);
 
   // 存档：从看板隐藏，实体移到 archive/（保留目录与文档）
   const handleArchive = async () => {

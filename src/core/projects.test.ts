@@ -2,7 +2,7 @@ import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { mkdtempSync, rmSync } from 'fs';
 import { tmpdir } from 'os';
 import { join } from 'path';
-import { listProjects, addProject, removeProject, renameProject, readGlobalConfig } from './projects.js';
+import { listProjects, addProject, removeProject, renameProject, readGlobalConfig, writeGlobalConfig, setLastProject, getLastProject } from './projects.js';
 
 describe('projects', () => {
   let tmpHome: string;
@@ -76,5 +76,44 @@ describe('projects', () => {
 
   it('renameProject 项目不存在抛错', () => {
     expect(() => renameProject('/no/such/path', '名字')).toThrow();
+  });
+
+  describe('lastProject（记住最后打开的项目 0003）', () => {
+    it('setLastProject 记录已注册项目路径', () => {
+      const proj = mkdtempSync(join(tmpdir(), 'proj-'));
+      addProject(proj);
+      setLastProject(proj);
+      expect(getLastProject()).toBe(proj);
+    });
+
+    it('setLastProject 对未注册项目不记录', () => {
+      setLastProject('/no/such/project');
+      expect(getLastProject()).toBeUndefined();
+    });
+
+    it('getLastProject 默认 undefined', () => {
+      expect(getLastProject()).toBeUndefined();
+    });
+
+    it('removeProject 移除当前 lastProject 时一并清空', () => {
+      const proj = mkdtempSync(join(tmpdir(), 'proj-'));
+      addProject(proj);
+      setLastProject(proj);
+      expect(getLastProject()).toBe(proj);
+      removeProject(proj);
+      expect(getLastProject()).toBeUndefined();
+    });
+
+    it('readGlobalConfig 过滤指向已删除项目的脏 lastProject', () => {
+      const proj = mkdtempSync(join(tmpdir(), 'proj-'));
+      addProject(proj);
+      setLastProject(proj);
+      // 直接写一个指向不存在项目的 lastProject，模拟历史脏值
+      const cfg = readGlobalConfig();
+      cfg.lastProject = '/another/removed/project';
+      writeGlobalConfig(cfg);
+      // 再次读取时应被清空（不在 projects 内）
+      expect(getLastProject()).toBeUndefined();
+    });
   });
 });
