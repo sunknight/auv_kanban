@@ -27,11 +27,27 @@ kanban init
 
 ## 三、装 Skill（让智能体能用，每台机器一次）
 
+### macOS / Linux
+
 ```bash
 kanban skill install
 ```
 
-装好后，ZCode 智能体里可用 `/kanban run <ID>` 触发自动执行任务。
+会自动创建软链 `~/.zcode/skills/kanban` → 包内的 `skill/kanban/`。
+
+### Windows
+
+Windows 因普通用户无 symlink 权限，`kanban skill install` **不会自动安装**，而是打印手动复制指引。手动执行一次即可：
+
+```powershell
+# 1. 新建目标目录（路径里的 <你> 是你的 Windows 用户名）
+New-Item -ItemType Directory -Force -Path "$env:USERPROFILE\.zcode\skills\kanban"
+
+# 2. 复制 SKILL.md（源文件随 npm 包发布）
+Copy-Item "$env:APPDATA\npm\node_modules\auv-kanban\skill\kanban\SKILL.md" -Destination "$env:USERPROFILE\.zcode\skills\kanban\"
+```
+
+> 源文件路径也可通过 `kanban skill install` 打印的提示直接复制。装好后 ZCode 智能体里可用 `/kanban run <ID>` 触发自动执行任务。
 
 ## 四、起 Web 界面（可选）
 
@@ -51,7 +67,7 @@ kanban serve                 # 默认端口 38311
 | `kanban move <ID> ready` | 把任务挪到指定栏（改进度） |
 | `kanban check <ID> <序号>` | 勾选/取消第 N 个子任务 |
 | `kanban progress <ID>` | 看任务进度 |
-| `kanban sync` | 重建栏软链、修复断链（幂等，可随时跑） |
+| `kanban sync` | 对齐 board.yml：重建栏软链（macOS/Linux）、修复孤儿与幽灵 id（所有平台，幂等可随时跑） |
 | `kanban delete <ID>` | 删除任务 |
 
 ## 六、典型工作流
@@ -82,7 +98,7 @@ your-project/.kanban/
       main.md          主文件（H1=标题 / 描述 / 提示词 / 子任务）
       logs.md          执行进展日志（智能体增量追加）
       design.md ...    其他产物文档
-  backlog/  ready/  doing/  done/    只读软链视图，指向 tasks/
+  backlog/  ready/  doing/  done/    只读软链视图，指向 tasks/（仅 macOS/Linux；Windows 为空目录，不影响使用）
 ```
 
 关键特性：**任务实体路径稳定**（永远在 `tasks/<ID>-<名>/`，改名只改 main.md 的 H1，不动目录），所以人和智能体可以放心并发读写。
@@ -90,6 +106,7 @@ your-project/.kanban/
 ## 八、常见问题
 
 - **在子目录里能用吗？** 能。`kanban` 会自动向上查找最近的 `.kanban`。
-- **软链断了 / 栏目录乱了？** 跑一次 `kanban sync` 即可重建。
+- **软链断了 / 栏目录乱了？** 跑一次 `kanban sync` 即可重建（macOS/Linux）。
+- **Windows 支持吗？** 支持。Windows 10/11 可正常安装使用，无需管理员权限或开发者模式。栏目录软链视图会自动跳过（数据不依赖软链），Skill 需手动复制一次（见上文「装 Skill」）。
 - **不想用 Web，只用命令行？** 完全可以，所有操作都有对应 CLI。
 - **端口被占？** `kanban serve --port 4000`。

@@ -53,7 +53,7 @@ kanban move 0001 ready
       logs.md            执行进展日志（智能体执行时增量追加，Web 详情准实时可见）
       design.md          任务的设计文档（智能体执行时产物）
       ...
-  backlog/               待办（只读软链视图，指向 ../tasks/）
+  backlog/               待办（只读软链视图，指向 ../tasks/；仅 Linux/macOS，Windows 为空目录）
     0001-任务名 -> ../tasks/0001-任务名
   ready/                 允许执行
   doing/                 进行中
@@ -61,6 +61,8 @@ kanban move 0001 ready
 ```
 
 > 实体集中在 `tasks/`，栏目录里的软链只是浏览用的视图。改进度用 `kanban move`（只改 board.yml + 迁软链，实体不动）；软链出错用 `kanban sync` 重建。
+>
+> **跨平台说明**：看板数据的真相源是 `tasks/` 实体 + `board.yml`，**不依赖软链**。栏软链只在 Linux/macOS 创建（作为目录浏览视图）；Windows 因普通用户无 symlink 权限会自动跳过软链，但所有 CLI 命令照常工作（详见下文「Windows 使用说明」）。
 
 ## main.md 结构
 
@@ -84,14 +86,14 @@ kanban move 0001 ready
 |---|---|
 | `kanban init [项目]` | 初始化看板（建 .kanban、默认四栏、board.yml，注册到全局 config） |
 | `kanban serve [--port]` | 启动 Web 服务（默认 38311） |
-| `kanban skill install` | 安装 Skill 到 ~/.zcode/skills/kanban/ |
+| `kanban skill install` | 安装 Skill 到 ~/.zcode/skills/kanban/（Linux/macOS 自动软链；Windows 打印手动复制指引） |
 | `kanban list [--column]` | 列出任务 |
 | `kanban new <名称>` | 在 backlog 创建任务 |
 | `kanban show <ID>` | 显示任务详情（含当前绝对路径） |
 | `kanban move <ID> <栏>` | 移动任务到指定栏（只改 board.yml，实体不动） |
 | `kanban check <ID> <序号>` | toggle 第 N 个子任务勾选 |
 | `kanban progress <ID>` | 显示任务进度 |
-| `kanban sync` | 重建所有栏软链以对齐 board.yml（修复断链/孤儿，幂等） |
+| `kanban sync` | 重建栏软链以对齐 board.yml（Linux/macOS）；Windows 下仅做 board.yml 自愈（孤儿归 backlog、清除幽灵 id） |
 | `kanban delete <ID>` | 删除任务（实体目录，ID 不回收） |
 | `kanban projects [add|remove] [path]` | 管理全局项目列表 |
 
@@ -129,3 +131,24 @@ main.md → logs.md → design.md → plan.md → readme.md → notes.md → 其
   "defaultPort": 38311
 }
 ```
+
+## Windows 使用说明
+
+本项目支持 **Windows 10/11**，安装与使用方式与 macOS/Linux 一致：
+
+```bash
+npm install -g auv-kanban
+kanban init
+kanban serve
+```
+
+**无需管理员权限、无需开启开发者模式**——所有核心命令（init/list/new/show/move/check/progress/sync/delete/serve）都能直接运行。
+
+唯一区别在于「栏目录软链视图」：
+- 看板数据的真相源是 `.kanban/tasks/` 实体目录 + `board.yml`，**不依赖软链**。
+- macOS/Linux 会额外在 `backlog/ ready/ doing/ done/` 目录里建符号链接（指向 `tasks/`），方便用文件管理器浏览。
+- Windows 因普通用户创建 symlink 需要开发者模式或管理员权限，本工具会**自动跳过软链创建**。这不影响任何功能——CLI 和 Web UI 都直接读 `tasks/` + `board.yml`，栏目录保持为空目录。
+
+**安装 Skill（让智能体能用）**：Windows 下 `kanban skill install` 不会自动建软链，而是打印手动复制指引（包含源文件路径、目标路径和 PowerShell `Copy-Item` 命令）。按提示执行一次即可，详见 [docs/USAGE.md](docs/USAGE.md#三装-skill让智能体能用每台机器一次)。
+
+> 开发自用脚本（`npm run stop / restart`）用了 `lsof`，仅在 macOS/Linux 可用，不影响全局安装后的使用。

@@ -3,3 +3,8 @@ dist/
 src/web/node_modules/
 src/web/dist/
 *.log
+
+# 工具产物，不纳入仓库
+.zcode/
+termstep-help.md
+termstep-tool.json
