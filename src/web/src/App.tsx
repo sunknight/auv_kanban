@@ -5,6 +5,7 @@ import { ProjectSidebar } from './components/ProjectSidebar.js';
 import { ProjectEditModal } from './components/ProjectEditModal.js';
 import { Board } from './components/Board.js';
 import { TaskModal } from './components/TaskModal.js';
+import { HelpModal } from './components/HelpModal.js';
 
 export function App() {
   const [projects, setProjects] = useState<ProjectEntry[]>([]);
@@ -15,6 +16,7 @@ export function App() {
   const [error, setError] = useState('');
   const [editingTask, setEditingTask] = useState<Task | null>(null);
   const [editingProject, setEditingProject] = useState<ProjectEntry | null>(null);
+  const [showHelp, setShowHelp] = useState(false);
 
   const loadProjects = useCallback(async () => {
     const { projects: list, lastProject } = await getProjects();
@@ -114,6 +116,7 @@ export function App() {
         borderBottom: '1px solid var(--border)',
         display: 'flex',
         alignItems: 'center',
+        justifyContent: 'space-between',
         padding: '0 16px',
       }}>
         <div style={{
@@ -124,6 +127,25 @@ export function App() {
         }}>
           Auv Kanban
         </div>
+        <button
+          onClick={() => setShowHelp(true)}
+          title="使用帮助"
+          style={{
+            border: '1px solid var(--border)',
+            background: '#fff',
+            color: 'var(--text-secondary)',
+            fontSize: 12,
+            padding: '3px 12px',
+            borderRadius: 'var(--radius-sm)',
+            cursor: 'pointer',
+            lineHeight: 1.6,
+            display: 'inline-flex',
+            alignItems: 'center',
+            gap: 4,
+          }}
+        >
+          ? 帮助
+        </button>
       </header>
 
       {error && (
@@ -194,6 +216,10 @@ export function App() {
           onSaved={loadProjects}
           onDeleted={handleProjectDeleted}
         />
+      )}
+
+      {showHelp && (
+        <HelpModal onClose={() => setShowHelp(false)} />
       )}
     </div>
   );

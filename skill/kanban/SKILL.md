@@ -31,7 +31,8 @@ kanban new <名称>             # 在 backlog 创建新任务
 kanban update <ID> <需求>     # 对任务追加一条补充需求（写入 ## 子任务，带 [补充] 标签）并重开到 doing
 kanban update --run <ID> <需求> # 同上，但追加后立即执行刚追加的这条（补了就做，避免忘记 run）
 kanban move <ID> <栏>         # 移动任务到指定栏（只改 board.yml，实体不动）
-kanban check <ID> <编号>      # toggle 指定编号子任务的勾选（编号为 2 位数字，如 03）
+kanban check <ID> <编号>      # 勾选指定编号子任务（设为已完成，非 toggle，幂等）
+kanban uncheck <ID> <编号>    # 取消勾选指定编号子任务（设为未完成，非 toggle，幂等）
 kanban progress <ID>          # 显示进度
 kanban init [项目]            # 初始化看板
 kanban sync                   # 重建所有栏软链以对齐 board.yml（修复断链/孤儿，幂等）

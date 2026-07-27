@@ -5,6 +5,7 @@ import { join } from 'path';
 import { initBoard } from './init-board.js';
 import { createTask, getTask } from './task-crud.js';
 import { toggleSubtask } from './check.js';
+import { setSubtaskDone } from './check.js';
 
 const MD = `# T
 
@@ -67,5 +68,57 @@ describe('check', () => {
     await toggleSubtask(tmp, taskId, 2);
     const md = readFileSync(join(taskPath, 'main.md'), 'utf8');
     expect(md).toContain('- [x] 02 第二');
+  });
+});
+
+describe('setSubtaskDone（明确勾选/取消，非 toggle）', () => {
+  let tmp: string;
+  let taskId: string;
+  let taskPath: string;
+  beforeEach(async () => {
+    tmp = mkdtempSync(join(tmpdir(), 'kb-'));
+    await initBoard(tmp);
+    const t = await createTask(tmp, 'T');
+    taskId = t.id;
+    taskPath = t.path;
+    writeFileSync(join(taskPath, 'main.md'), MD);
+  });
+  afterEach(() => rmSync(tmp, { recursive: true, force: true }));
+
+  it('setSubtaskDone done=true 把未完成改为完成', async () => {
+    await setSubtaskDone(tmp, taskId, '02', true);
+    const md = readFileSync(join(taskPath, 'main.md'), 'utf8');
+    expect(md).toContain('- [x] 02 第二');
+  });
+
+  it('setSubtaskDone 幂等：对已勾选项再设 done=true 不变化', async () => {
+    await setSubtaskDone(tmp, taskId, '02', true);
+    await setSubtaskDone(tmp, taskId, '02', true);
+    const md = readFileSync(join(taskPath, 'main.md'), 'utf8');
+    expect(md).toContain('- [x] 02 第二');
+  });
+
+  it('setSubtaskDone done=false 把已完成改为未完成', async () => {
+    await setSubtaskDone(tmp, taskId, '02', true);
+    await setSubtaskDone(tmp, taskId, '02', false);
+    const md = readFileSync(join(taskPath, 'main.md'), 'utf8');
+    expect(md).toContain('- [ ] 02 第二');
+  });
+
+  it('setSubtaskDone 幂等：对未勾选项再设 done=false 不变化', async () => {
+    await setSubtaskDone(tmp, taskId, '02', false);
+    const md = readFileSync(join(taskPath, 'main.md'), 'utf8');
+    expect(md).toContain('- [ ] 02 第二');
+  });
+
+  it('setSubtaskDone 编号不存在报错', async () => {
+    await expect(setSubtaskDone(tmp, taskId, '99', true)).rejects.toThrow(/不存在/);
+  });
+
+  it('setSubtaskDone 不影响其他行', async () => {
+    await setSubtaskDone(tmp, taskId, '02', true);
+    const md = readFileSync(join(taskPath, 'main.md'), 'utf8');
+    expect(md).toContain('- [ ] 01 第一');
+    expect(md).toContain('- [ ] 03 第三');
   });
 });

@@ -6,6 +6,7 @@ import { listCommand } from './cli/commands/list.js';
 import { newCommand } from './cli/commands/new.js';
 import { moveCommand } from './cli/commands/move.js';
 import { checkCommand } from './cli/commands/check.js';
+import { uncheckCommand } from './cli/commands/uncheck.js';
 import { updateCommand } from './cli/commands/update.js';
 import { deleteCommand } from './cli/commands/delete.js';
 import { archiveCommand } from './cli/commands/archive.js';
@@ -26,6 +27,7 @@ try {
     .command(newCommand)
     .command(moveCommand)
     .command(checkCommand)
+    .command(uncheckCommand)
     .command(updateCommand)
     .command(deleteCommand)
     .command(archiveCommand)
