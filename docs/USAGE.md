@@ -113,7 +113,7 @@ your-project/.kanban/
 - **软链断了 / 栏目录乱了？** 跑一次 `kanban sync` 即可重建（macOS/Linux）。
 - **Windows 支持吗？** 支持。Windows 10/11 可正常安装使用，无需管理员权限或开发者模式。栏目录软链视图会自动跳过（数据不依赖软链），Skill 需手动复制一次（见上文「装 Skill」）。
 - **不想用 Web，只用命令行？** 完全可以，所有操作都有对应 CLI。
-- **端口被占？** `kanban serve --port 4000` 换个端口。开发本仓库源码时还可用 `PORT=xxxxx npm run dev:server`，详见 [开发指南](DEVELOPMENT.md)。
+- **端口被占？** `kanban serve --port 4000` 换个端口。开发本仓库源码时，`npm run dev:server`（默认 38511）/ `npm run dev:web`（默认 38411）已与正式版 38311 区分，详见 [开发指南](DEVELOPMENT.md)。
 
 ## 九、安全使用须知
 

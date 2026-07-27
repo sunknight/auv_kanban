@@ -52,12 +52,31 @@ auv-kanban 的 Web 由两部分组成，开发时要分清：
 
 > ⚠️ 以上所有 `npm run *` 脚本跑的都是**本地代码**（源码或本地 dist），不是全局安装的 `kanban`。开发期间始终用这些脚本，别用全局 `kanban serve`（见下文「代码来源差异」）。
 
-## 四、端口策略（PORT 环境变量）
+## 四、端口策略
 
-所有 serve 相关脚本都读 `PORT` 环境变量，**默认 38311**。端口优先级：
+开发模式用**两个端口**：前端 vite 一个、后端 serve 一个，各听各的，避免双进程抢同一端口。
 
-```
---port 参数  >  PORT 环境变量  >  config.defaultPort(38311)
+### 默认端口（约定）
+
+| 进程 | 默认端口 | 说明 |
+|---|---|---|
+| 正式版 `npm start` / `kanban serve` | 38311 | 单进程，serve 托管构建产物 |
+| 开发后端 `npm run dev:server` | 38511 | tsx 热重载 |
+| 开发前端 `npm run dev:web` | 38411 | vite HMR，浏览器开这个 |
+
+> 开发模式下 `dev:server`（38511）和 `dev:web`（38411）端口不同，各管各的。前端的 `/api`、`/socket.io` 自动 proxy 到后端 38511。两个命令**不传任何变量**就能自动配对。
+
+### 开发调试（最常用）
+
+开**两个终端**：
+
+```bash
+# 终端1：后端 serve（热重载，默认听 38511）
+npm run dev:server
+
+# 终端2：前端 vite（HMR，默认听 38411，proxy 到 38511）
+npm run dev:web
+# 浏览器打开 http://localhost:38411
 ```
 
 ### 正式版（默认端口）
@@ -67,40 +86,48 @@ npm start                    # 后端 serve，端口 38311
 # 浏览器打开 http://localhost:38311
 ```
 
-### 开发调试（指定端口，避免与正式版冲突）
+### 自定义端口（环境变量）
 
-开**两个终端**：
+两个环境变量覆盖默认值：
 
-```bash
-# 终端1：后端 serve（本地代码，热重载）
-PORT=38411 npm run dev:server
-
-# 终端2：前端 vite dev（HMR）
-PORT=38411 npm run dev:web
-# 浏览器打开 http://localhost:5173
-```
-
-> 两个 `PORT=38411` 必须一致：后端听 38411，前端 vite 的 proxy 才会指向 38411。
-> vite dev 默认监听 5173，与后端端口无关；它只是把 `/api`、`/socket.io` 转发给 `PORT` 指定的后端。
-
-### 停止指定端口的服务
+| 变量 | 作用 | 默认 | 谁读它 |
+|---|---|---|---|
+| `PORT` | 当前进程监听端口 | dev:server=38511 / dev:web=38411 | serve + vite |
+| `BACKEND_PORT` | 后端端口（vite proxy 目标） | 38511 | 仅 vite |
 
 ```bash
-PORT=38411 npm run stop      # 停 38411
-npm run stop                 # 停默认 38311
+# 例：后端听 39000
+PORT=39000 npm run dev:server
+
+# 例：前端听 39001，proxy 到后端 39000（两个变量都传）
+PORT=39001 BACKEND_PORT=39000 npm run dev:web
 ```
+
+> 端口优先级（后端）：`--port` 参数 > `PORT` 环境变量 > config.defaultPort(38311)。
+> 注意：`dev:web` 的 `PORT` 是**前端自己监听的端口**，不是后端；后端端口用 `BACKEND_PORT` 告诉前端去哪 proxy。
+
+### 停止服务
+
+```bash
+npm run dev:stop             # 一键停开发环境（38411 前端 + 38511 后端）
+npm run stop                 # 停正式版（38311）
+PORT=38511 npm run stop      # 单独停开发后端
+PORT=38411 npm run stop      # 单独停开发前端
+```
+
+> `dev:stop` 一次停开发环境两个进程；`stop` 默认只停正式版 38311，不会误伤开发进程（反之亦然）。
 
 ## 五、开发版与正式版并存（无冲突）
 
-可以同时运行正式版和测试版，互不干扰：
+可以同时运行正式版和开发版，互不干扰：
 
 | 进程 | 端口 | 代码 |
 |---|---|---|
 | 正式版 `kanban serve` 或 `npm start` | 38311 | 全局安装版 / 本地 dist |
-| 测试后端 `PORT=38411 npm run dev:server` | 38411 | 本地源码（热重载） |
-| 测试前端 `PORT=38411 npm run dev:web` | 5173 | 本地源码（HMR） |
+| 开发后端 `npm run dev:server` | 38511 | 本地源码（热重载） |
+| 开发前端 `npm run dev:web` | 38411 | 本地源码（HMR） |
 
-三个端口互不重叠，浏览器分别开 `localhost:38311`（正式版）和 `localhost:5173`（测试版）即可。
+三个端口（38311/38411/38511）互不重叠，浏览器分别开 `localhost:38311`（正式版）和 `localhost:38411`（开发版）即可。
 
 ### 数据共享（重要特性）
 
@@ -148,14 +175,16 @@ npm test              # 跑测试，确认无回归
 # 2. 改前端代码
 npm run build:web     # 或用 dev:web 热更新即时看效果
 
-# 3. 端到端验证（指定端口，不影响正式版）
-PORT=38411 npm run dev:server   # 终端1
-PORT=38411 npm run dev:web      # 终端2，浏览器开 localhost:5173
+# 3. 端到端验证（默认端口，不影响正式版 38311）
+npm run dev:server   # 终端1：后端 38511
+npm run dev:web      # 终端2：前端 38411，浏览器开 localhost:38411
 ```
 
 ## 八、常见问题
 
 - **`npm run start` 和 `kanban serve` 有什么区别？** 语义一样都是启 serve，但前者跑本地代码、后者跑全局安装版。开发期间用前者。详见上文「代码来源差异」。
+- **为什么 dev:web 默认听 38411 而不是 5173？** 已改为读 `PORT`（默认 38411），让开发端口可控、与正式版 38311 区分。vite 原生默认是 5173，本项目覆盖为 38411。想改回用 `PORT=5173 npm run dev:web`。
+- **前端和后端为什么端口不同？** 双进程模式（vite HMR + serve）各自监听，避免抢同一端口。前端 38411、后端 38511，前端自动 proxy 到后端。详见「端口策略」。
 - **端口被占？** 用 `PORT=xxxxx` 指定别的端口；或 `npm run stop` 停掉占用的。
 - **改了后端代码看不到效果？** 用 `dev:server`（热重载）或改完 `npm run build` 再 `start`。全局 `kanban serve` 不会反映本地改动。
 - **前端改了不生效？** 用 `dev:web`（HMR）；若用 `start`/`serve` 看的是构建产物，需 `build:web`。
