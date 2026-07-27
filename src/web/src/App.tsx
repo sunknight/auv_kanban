@@ -89,7 +89,7 @@ export function App() {
           color: 'var(--text-primary)',
           letterSpacing: '-0.3px',
         }}>
-          Agent Kanban
+          Auv Kanban
         </div>
       </header>
 

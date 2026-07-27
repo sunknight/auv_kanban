@@ -1,4 +1,6 @@
-# Agent Kanban · 使用说明
+# Auv Kanban · 使用说明
+
+**A**gent **U**ser **V**elocity · 基于 Markdown 文件 + 目录的人/智能体共用看板。
 
 > Markdown + 目录驱动的人/智能体共用看板。看板数据就是项目里的 `.kanban/` 目录，随 git 管理；人（CLI / Web）和 ZCode 智能体（Skill）通过文件系统协作。
 
