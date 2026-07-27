@@ -56,6 +56,10 @@ kanban serve                 # 默认端口 38311
 # 浏览器打开 http://localhost:38311
 ```
 
+指定端口：`kanban serve --port 4000`。
+
+> 这是**已安装版**的用法。如果你在开发本仓库源码，开发调试的端口策略（`PORT` 环境变量、vite HMR、与正式版并存）见 [开发指南](DEVELOPMENT.md)。
+
 ## 五、日常命令速查
 
 | 命令 | 作用 |
@@ -109,7 +113,7 @@ your-project/.kanban/
 - **软链断了 / 栏目录乱了？** 跑一次 `kanban sync` 即可重建（macOS/Linux）。
 - **Windows 支持吗？** 支持。Windows 10/11 可正常安装使用，无需管理员权限或开发者模式。栏目录软链视图会自动跳过（数据不依赖软链），Skill 需手动复制一次（见上文「装 Skill」）。
 - **不想用 Web，只用命令行？** 完全可以，所有操作都有对应 CLI。
-- **端口被占？** `kanban serve --port 4000`。
+- **端口被占？** `kanban serve --port 4000` 换个端口。开发本仓库源码时还可用 `PORT=xxxxx npm run dev:server`，详见 [开发指南](DEVELOPMENT.md)。
 
 ## 九、安全使用须知
 

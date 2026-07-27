@@ -15,7 +15,9 @@ export interface ServerOptions {
 }
 
 export async function startServer(opts: ServerOptions): Promise<void> {
-  const fastify = Fastify({ logger: true });
+  // logger 仅记错误：避免对每个 HTTP 请求（含 socket.io 高频轮询）刷屏（任务 0008）。
+  // 正常请求静默，仅在出错（4xx/5xx、未捕获异常）时输出，便于排查。
+  const fastify = Fastify({ logger: { level: 'error' } });
 
   // 静态托管前端构建产物（dist/web-dist，构建后存在；前端 task 完成前不存在，跳过）
   const webDist = join(__dirname, '..', 'web-dist');

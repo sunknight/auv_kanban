@@ -46,7 +46,7 @@ git push origin main --tags      # 注意带 --tags，否则 tag 不会推上去
 npm publish --registry=https://registry.npmjs.org/ --otp=你的6位验证码
 ```
 
-发布时 `prepublishOnly` 钩子会自动执行 `build:all`（构建前端+后端）+ `test`（94 个测试），全过才上传。
+发布时 `prepublishOnly` 钩子会自动执行 `build:all`（构建前端+后端）+ `test`（113 个测试），全过才上传。
 
 ### 命令参数说明（重要）
 
