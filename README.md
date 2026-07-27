@@ -31,6 +31,7 @@ kanban skill install
 # 3. 起 Web 服务（默认端口 38311）
 kanban serve
 # 浏览器打开 http://localhost:38311
+# 服务默认仅监听本机（127.0.0.1）、无认证；如需远程访问请自行加反向代理 + 鉴权，详见 docs/USAGE.md「安全使用须知」
 
 # 4. 记录想法
 kanban new "优化首页加载"

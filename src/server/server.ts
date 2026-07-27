@@ -23,8 +23,9 @@ export async function startServer(opts: ServerOptions): Promise<void> {
     await fastify.register(fastifyStatic, { root: webDist, prefix: '/' });
   }
 
-  // socket.io（挂到同一 http server）
-  const io = new SocketIOServer(fastify.server, { cors: { origin: '*' } });
+  // socket.io（挂到同一 http server）。前端与 API/WS 同源（静态托管在同一 fastify），
+  // 故 CORS 用 origin:true 回显请求源——等价同源放行，避免开放跨域（修复 F5）。
+  const io = new SocketIOServer(fastify.server, { cors: { origin: true } });
 
   // watch manager：给每个已注册项目起 watcher，变化广播
   const watchManager = new WatchManager(io);
@@ -37,9 +38,9 @@ export async function startServer(opts: ServerOptions): Promise<void> {
     socket.on('subscribe', (projectPath: string) => socket.join(`proj:${projectPath}`));
   });
 
-  // host 用 0.0.0.0 而非 localhost：后者会同时绑 IPv4+IPv6 双栈，
-  // socket.io 只 attach 到其中一个 handle，导致走 127.0.0.1（IPv4）的
-  // /socket.io/ 请求落到 fastify 路由层返回 404。
-  await fastify.listen({ port: opts.port, host: '0.0.0.0' });
-  console.log(`看板服务已启动：http://localhost:${opts.port}`);
+  // host 绑 127.0.0.1：纯 IPv4 单栈，既规避双栈 localhost 下 socket.io 只 attach
+  // 单个 handle 的 404 问题，又确保服务仅本机可达（修复 F5：避免同网段访问）。
+  // 如需远程访问请自行加反向代理 + 鉴权，勿直接改为 0.0.0.0。
+  await fastify.listen({ port: opts.port, host: '127.0.0.1' });
+  console.log(`看板服务已启动：http://localhost:${opts.port}（仅本机可达）`);
 }

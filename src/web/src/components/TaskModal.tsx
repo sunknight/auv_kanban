@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { marked } from 'marked';
+import DOMPurify from 'dompurify';
 import type { Task, DocInfo, DocContent } from '../types.js';
 import { updateTask, moveTask, listDocs, readDoc, archiveTask, deleteTask, subscribeBoard } from '../api.js';
 
@@ -454,7 +455,7 @@ export function TaskModal(props: {
                 ) : docContent.type === 'markdown' ? (
                   <div
                     className="md-preview"
-                    dangerouslySetInnerHTML={{ __html: marked.parse(docContent.content, { async: false }) as string }}
+                    dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize(marked.parse(docContent.content, { async: false }) as string) }}
                   />
                 ) : (
                   <pre style={{ margin: 0, whiteSpace: 'pre-wrap', wordBreak: 'break-word', fontSize: 12, fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace' }}>{docContent.content}</pre>
