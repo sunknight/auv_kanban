@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
-import { getProjects, getBoard, subscribeBoard, addProject, renameProject } from './api.js';
+import { getProjects, getBoard, subscribeBoard, addProject, renameProject, setLastProject } from './api.js';
 import type { Board as BoardT, ProjectEntry, Task } from './types.js';
 import { ProjectSidebar } from './components/ProjectSidebar.js';
 import { Board } from './components/Board.js';
@@ -15,10 +15,15 @@ export function App() {
   const [editingTask, setEditingTask] = useState<Task | null>(null);
 
   const loadProjects = useCallback(async () => {
-    const list = await getProjects();
+    const { projects: list, lastProject } = await getProjects();
     setProjects(list);
-    // 若当前未选中项目且列表非空，默认选第一个
-    setCurrent(prev => prev ?? (list.length > 0 ? list[0].path : null));
+    // 仅在尚未选中时决定初始项目（刷新/重开的恢复点）：
+    // 优先用 lastProject（若仍属项目列表），否则回退到第一个项目。
+    setCurrent(prev => {
+      if (prev !== null) return prev;
+      if (lastProject && list.some(p => p.path === lastProject)) return lastProject;
+      return list.length > 0 ? list[0].path : null;
+    });
   }, []);
 
   useEffect(() => {
@@ -43,6 +48,12 @@ export function App() {
     const unsub = subscribeBoard(current, refreshBoard);
     return unsub;
   }, [current, refreshBoard]);
+
+  // 0003：当前项目变化即持久化为 lastProject，刷新/重开网页时据此恢复。
+  // （首个非 null current 既覆盖恢复来的项目，也覆盖手动切换/新增后的项目。）
+  useEffect(() => {
+    if (current) setLastProject(current).catch(() => { /* 持久化失败不影响使用 */ });
+  }, [current]);
 
   const handleSelect = (path: string) => {
     setCurrent(path);

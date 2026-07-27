@@ -3,10 +3,18 @@ import type { Board, ProjectEntry, Task, DocInfo, DocContent } from './types.js'
 
 const base = '';
 
-export async function getProjects(): Promise<ProjectEntry[]> {
+export async function getProjects(): Promise<{ projects: ProjectEntry[]; lastProject?: string }> {
   const r = await fetch(`${base}/api/projects`);
   const j = await r.json();
-  return j.projects;
+  return { projects: j.projects ?? [], lastProject: j.lastProject };
+}
+
+/** 记录最后打开的项目（0003）：刷新/重开时据此恢复 */
+export async function setLastProject(path: string): Promise<void> {
+  await fetch(`${base}/api/last-project`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ path }),
+  });
 }
 export async function addProject(path: string): Promise<void> {
   await fetch(`${base}/api/projects`, {

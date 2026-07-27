@@ -80,4 +80,6 @@ export interface ProjectEntry {
 export interface GlobalConfig {
   projects: ProjectEntry[];
   defaultPort: number;
+  /** 最后打开的项目绝对路径（Web 刷新/重开时恢复用）。可能不存在/已失效，使用方需校验仍属 projects。 */
+  lastProject?: string;
 }
