@@ -25,7 +25,7 @@ npm install -g auv-kanban
 cd ~/my-project
 kanban init
 
-# 2. 装 Skill（一次性，所有项目生效）
+# 2. 装 Skill（一次性，所有项目生效；默认探测本机已装的 agent 全装）
 kanban skill install
 
 # 3. 起 Web 服务（默认端口 38311）
@@ -87,7 +87,7 @@ kanban move 0001 ready
 |---|---|
 | `kanban init [项目]` | 初始化看板（建 .kanban、默认四栏、board.yml，注册到全局 config） |
 | `kanban serve [--port]` | 启动 Web 服务（默认 38311） |
-| `kanban skill install` | 安装 Skill 到 ~/.zcode/skills/kanban/（Linux/macOS 自动软链；Windows 打印手动复制指引） |
+| `kanban skill install` | 安装 Skill 到各 agent 的 skills 目录（默认探测本机已装的 agent 全装，软链到源）；详见下方「装 Skill 到多个 agent」 |
 | `kanban list [--column]` | 列出任务 |
 | `kanban new <名称>` | 在 backlog 创建任务 |
 | `kanban show <ID>` | 显示任务详情（含当前绝对路径） |
@@ -97,6 +97,22 @@ kanban move 0001 ready
 | `kanban sync` | 重建栏软链以对齐 board.yml（Linux/macOS）；Windows 下仅做 board.yml 自愈（孤儿归 backlog、清除幽灵 id） |
 | `kanban delete <ID>` | 删除任务（实体目录，ID 不回收） |
 | `kanban projects [add|remove] [path]` | 管理全局项目列表 |
+
+## 装 Skill 到多个 agent
+
+`kanban skill install` 会把 Skill 装到各 agent 的 skills 目录（软链到源，改一处全生效）。支持的目标：`zcode` / `claude` / `codex` / `gemini` / `agents`，zcode 与其余 agent 完全同等。
+
+```bash
+kanban skill install                    # 默认：探测本机已装的 agent 全装
+kanban skill install --list             # 只列出探测结果（id | 目录 | 是否已装），不安装
+kanban skill install --agent claude,codex   # 只给指定 agent 装（逗号分隔，可多选）
+kanban skill install --all              # 给全部已知 agent 装（目录不存在则创建）
+```
+
+- 默认行为：检测到 `~/.zcode/skills`、`~/.claude/skills` 等目录存在就装；一个都没探测到时提示用 `--agent` 或 `--all`。
+- 安装方式：在 `~/<agent>/skills/kanban` 建软链指向包内 `skill/kanban`，重复执行幂等（覆盖旧软链）。
+- Windows：因普通用户无 symlink 权限，不会自动建软链，而是对选中的目标打印手动复制指引（PowerShell 命令）。
+- 未知 agent id 会报错并列出全部可选项。
 
 ## 智能体执行
 

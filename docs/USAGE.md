@@ -27,17 +27,30 @@ kanban init
 
 ## 三、装 Skill（让智能体能用，每台机器一次）
 
+Skill 可装到多个 agent 的 skills 目录，支持的目标：`zcode` / `claude` / `codex` / `gemini` / `agents`（zcode 与其余 agent 完全同等）。
+
 ### macOS / Linux
 
 ```bash
-kanban skill install
+kanban skill install                    # 默认：探测本机已装的 agent 全装
 ```
 
-会自动创建软链 `~/.zcode/skills/kanban` → 包内的 `skill/kanban/`。
+默认会检测 `~/.zcode/skills`、`~/.claude/skills` 等目录是否存在，存在的都建软链（`~/<agent>/skills/kanban` → 包内 `skill/kanban/`），改一次源全部生效。
+
+需要更精细控制时：
+
+```bash
+kanban skill install --list                 # 只列出探测结果，不安装
+kanban skill install --agent claude,codex   # 只给指定 agent 装（逗号分隔，可多选）
+kanban skill install --all                  # 给全部已知 agent 装（目录不存在则创建）
+```
+
+- 重复执行幂等（覆盖旧软链）；未知 agent id 会报错并列出全部可选项。
+- 一个 agent 都没探测到时，提示用 `--agent` 或 `--all`。
 
 ### Windows
 
-Windows 因普通用户无 symlink 权限，`kanban skill install` **不会自动安装**，而是打印手动复制指引。手动执行一次即可：
+Windows 因普通用户无 symlink 权限，`kanban skill install` **不会自动建软链**，而是对选中的目标分别打印手动复制指引。手动执行一次即可（以 zcode 为例）：
 
 ```powershell
 # 1. 新建目标目录（路径里的 <你> 是你的 Windows 用户名）
@@ -47,7 +60,7 @@ New-Item -ItemType Directory -Force -Path "$env:USERPROFILE\.zcode\skills\kanban
 Copy-Item "$env:APPDATA\npm\node_modules\auv-kanban\skill\kanban\SKILL.md" -Destination "$env:USERPROFILE\.zcode\skills\kanban\"
 ```
 
-> 源文件路径也可通过 `kanban skill install` 打印的提示直接复制。装好后 ZCode 智能体里可用 `/kanban run <ID>` 触发自动执行任务。
+> 源文件路径、每个 agent 的目标路径都可通过 `kanban skill install`（或 `--agent <id>`）打印的提示直接复制。装好后各 agent 里可用 `/kanban run <ID>` 触发自动执行任务（具体触发语法以各 agent 为准）。
 
 ## 四、起 Web 界面（可选）
 
