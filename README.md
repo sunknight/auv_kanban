@@ -2,6 +2,8 @@
 
 基于 Markdown 文件 + 目录的**人 / 智能体共用看板**。完全无数据库，看板数据随项目 git 管理；人与 ZCode 智能体通过文件系统这块共享黑板协作。
 
+> 📖 完整使用说明见 [docs/USAGE.md](docs/USAGE.md)
+
 ## 特性
 
 - **Markdown + 目录驱动**：任务实体是 `.kanban/tasks/` 下的子目录（含 main.md + 素材），栏归属（状态）记录在 `board.yml`。
