@@ -50,6 +50,35 @@ export function removeProject(projectPath: string): void {
 }
 
 /**
+ * 按给定顺序重排项目列表。
+ *
+ * - 入参为「期望的完整新顺序」路径数组（绝对/相对均可，内部 resolve）。
+ * - 保留每个项目原有 name 等字段，只调整顺序。
+ * - 防御：未在现有列表里的路径忽略；现有项目若未出现在入参中，补在末尾（避免误丢）。
+ * - 因此「把 A 移到 B 前面」只需传「移除 A 后、在 B 前插入 A」的完整新顺序即可。
+ */
+export function reorderProjects(orderedPaths: string[]): void {
+  const config = readGlobalConfig();
+  const byPath = new Map(config.projects.map(p => [p.path, p]));
+  const ordered: ProjectEntry[] = [];
+  const seen = new Set<string>();
+  for (const raw of orderedPaths) {
+    const abs = resolve(raw);
+    const entry = byPath.get(abs);
+    if (entry && !seen.has(abs)) {
+      ordered.push(entry);
+      seen.add(abs);
+    }
+  }
+  // 未列入入参的现有项目补在末尾，保持原相对顺序
+  for (const p of config.projects) {
+    if (!seen.has(p.path)) ordered.push(p);
+  }
+  config.projects = ordered;
+  writeGlobalConfig(config);
+}
+
+/**
  * 修改项目显示名（只改 config.json 的 name，不动磁盘目录/路径）。
  * 项目不存在时抛错。name 去首尾空白后为空时抛错。
  */

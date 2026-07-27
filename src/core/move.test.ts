@@ -49,4 +49,34 @@ describe('move', () => {
     const t = await createTask(tmp, 'W');
     await expect(moveTask(tmp, t.id, '不存在的栏')).rejects.toThrow();
   });
+
+  it('moveTask 同栏 + toIndex：在所在栏内重排 order', async () => {
+    const a = await createTask(tmp, 'A');
+    const b = await createTask(tmp, 'B');
+    const c = await createTask(tmp, 'C');
+    const { readBoardConfig } = await import('./board-yml.js');
+    // 初始 backlog 顺序：[a, b, c]
+    expect(readBoardConfig(tmp).order.backlog).toEqual([a.id, b.id, c.id]);
+    // 把 a 移到末尾
+    await moveTask(tmp, a.id, 'backlog', 3);
+    expect(readBoardConfig(tmp).order.backlog).toEqual([b.id, c.id, a.id]);
+    // 把 c（当前在 index 1）插到最前
+    await moveTask(tmp, c.id, 'backlog', 0);
+    expect(readBoardConfig(tmp).order.backlog).toEqual([c.id, b.id, a.id]);
+    // toIndex 越界自动夹断到末尾，不报错
+    await moveTask(tmp, c.id, 'backlog', 999);
+    expect(readBoardConfig(tmp).order.backlog).toEqual([b.id, a.id, c.id]);
+  });
+
+  it('moveTask 跨栏 + toIndex：插入目标栏指定位置', async () => {
+    const a = await createTask(tmp, 'A');
+    const b = await createTask(tmp, 'B');
+    const c = await createTask(tmp, 'C');
+    // c 先跨栏到 ready（ready = [c]），再把 a 跨栏插入 ready 最前
+    await moveTask(tmp, c.id, 'ready');
+    await moveTask(tmp, a.id, 'ready', 0);
+    const { readBoardConfig } = await import('./board-yml.js');
+    expect(readBoardConfig(tmp).order.ready).toEqual([a.id, c.id]);
+    expect(readBoardConfig(tmp).order.backlog).toEqual([b.id]);
+  });
 });

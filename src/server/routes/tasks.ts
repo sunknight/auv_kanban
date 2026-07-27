@@ -57,8 +57,8 @@ export function registerTaskRoutes(fastify: FastifyInstance): void {
 
   fastify.post('/api/tasks/:id/move', async (req) => {
     const { id } = req.params as { id: string };
-    const { project, column } = req.body as { project: string; column: string };
-    await moveTask(project, id, column);
+    const { project, column, toIndex } = req.body as { project: string; column: string; toIndex?: number };
+    await moveTask(project, id, column, toIndex);
     return { ok: true };
   });
 

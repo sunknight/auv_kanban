@@ -2,7 +2,7 @@ import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { mkdtempSync, rmSync } from 'fs';
 import { tmpdir } from 'os';
 import { join } from 'path';
-import { listProjects, addProject, removeProject, renameProject, readGlobalConfig, writeGlobalConfig, setLastProject, getLastProject } from './projects.js';
+import { listProjects, addProject, removeProject, renameProject, reorderProjects, readGlobalConfig, writeGlobalConfig, setLastProject, getLastProject } from './projects.js';
 
 describe('projects', () => {
   let tmpHome: string;
@@ -76,6 +76,51 @@ describe('projects', () => {
 
   it('renameProject 项目不存在抛错', () => {
     expect(() => renameProject('/no/such/path', '名字')).toThrow();
+  });
+
+  describe('reorderProjects（项目排序）', () => {
+    it('按入参完整顺序重排，保留各项目 name 字段', () => {
+      const p1 = mkdtempSync(join(tmpdir(), 'a-'));
+      const p2 = mkdtempSync(join(tmpdir(), 'b-'));
+      const p3 = mkdtempSync(join(tmpdir(), 'c-'));
+      addProject(p1); addProject(p2); addProject(p3);
+      renameProject(p2, 'B项目');
+      // 初始 [p1, p2, p3] → 重排为 [p3, p1, p2]
+      reorderProjects([p3, p1, p2]);
+      const paths = readGlobalConfig().projects.map(p => p.path);
+      expect(paths).toEqual([p3, p1, p2]);
+      // name 字段保留
+      expect(readGlobalConfig().projects[2].name).toBe('B项目');
+    });
+
+    it('入参未涵盖的现有项目补在末尾（不丢失）', () => {
+      const p1 = mkdtempSync(join(tmpdir(), 'a-'));
+      const p2 = mkdtempSync(join(tmpdir(), 'b-'));
+      const p3 = mkdtempSync(join(tmpdir(), 'c-'));
+      addProject(p1); addProject(p2); addProject(p3);
+      // 只传 p2，p1/p3 应补末尾
+      reorderProjects([p2]);
+      const paths = readGlobalConfig().projects.map(p => p.path);
+      expect(paths[0]).toBe(p2);
+      expect(paths.slice(1).sort()).toEqual([p1, p3].sort());
+      expect(readGlobalConfig().projects).toHaveLength(3);
+    });
+
+    it('入参含未知路径或重复项被忽略（幂等安全）', () => {
+      const p1 = mkdtempSync(join(tmpdir(), 'a-'));
+      const p2 = mkdtempSync(join(tmpdir(), 'b-'));
+      addProject(p1); addProject(p2);
+      reorderProjects([p2, p2, '/no/such/path', p1]);
+      expect(readGlobalConfig().projects.map(p => p.path)).toEqual([p2, p1]);
+    });
+
+    it('空入参不丢项目（保持原顺序）', () => {
+      const p1 = mkdtempSync(join(tmpdir(), 'a-'));
+      const p2 = mkdtempSync(join(tmpdir(), 'b-'));
+      addProject(p1); addProject(p2);
+      reorderProjects([]);
+      expect(readGlobalConfig().projects.map(p => p.path)).toEqual([p1, p2]);
+    });
   });
 
   describe('lastProject（记住最后打开的项目 0003）', () => {

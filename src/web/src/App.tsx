@@ -1,7 +1,8 @@
 import { useState, useEffect, useCallback } from 'react';
-import { getProjects, getBoard, subscribeBoard, addProject, renameProject, setLastProject } from './api.js';
+import { getProjects, getBoard, subscribeBoard, addProject, reorderProjects, setLastProject } from './api.js';
 import type { Board as BoardT, ProjectEntry, Task } from './types.js';
 import { ProjectSidebar } from './components/ProjectSidebar.js';
+import { ProjectEditModal } from './components/ProjectEditModal.js';
 import { Board } from './components/Board.js';
 import { TaskModal } from './components/TaskModal.js';
 
@@ -13,6 +14,7 @@ export function App() {
   const [newPath, setNewPath] = useState('');
   const [error, setError] = useState('');
   const [editingTask, setEditingTask] = useState<Task | null>(null);
+  const [editingProject, setEditingProject] = useState<ProjectEntry | null>(null);
 
   const loadProjects = useCallback(async () => {
     const { projects: list, lastProject } = await getProjects();
@@ -73,13 +75,33 @@ export function App() {
     }
   };
 
-  const handleRename = async (path: string, name: string) => {
+  // 项目拖拽排序：乐观更新本地顺序（立即响应），再持久化到后端
+  const handleReorder = async (orderedPaths: string[]) => {
+    const byPath = new Map(projects.map(p => [p.path, p]));
+    const optimistic = orderedPaths.map(p => byPath.get(p)).filter(Boolean) as ProjectEntry[];
+    // 乐观更新仅重排，不丢项目（与后端 reorderProjects 防御一致）
+    setProjects(prev => {
+      const seen = new Set(orderedPaths);
+      const rest = prev.filter(p => !seen.has(p.path));
+      return [...optimistic, ...rest];
+    });
     try {
-      await renameProject(path, name);
-      await loadProjects();
-    } catch (e) {
-      setError('修改项目名失败');
+      await reorderProjects(orderedPaths);
+    } catch {
+      setError('项目排序保存失败');
+      await loadProjects(); // 回滚到服务端真实顺序
     }
+  };
+
+  // 项目删除后善后：若删的是当前项目，切到剩余第一个
+  const handleProjectDeleted = async (deletedPath: string) => {
+    await loadProjects();
+    setCurrent(prev => {
+      if (prev !== deletedPath) return prev;
+      const rest = projects.filter(p => p.path !== deletedPath);
+      return rest.length > 0 ? rest[0].path : null;
+    });
+    setError('');
   };
 
   return (
@@ -128,7 +150,8 @@ export function App() {
           onStartAdd={() => setAdding(true)}
           onSubmitAdd={handleAdd}
           onCancelAdd={() => { setAdding(false); setNewPath(''); setError(''); }}
-          onRename={handleRename}
+          onEdit={setEditingProject}
+          onReorder={handleReorder}
         />
         <main style={{
           flex: 1,
@@ -161,6 +184,15 @@ export function App() {
           columns={board?.columns.map(c => ({ name: c.name, display: c.display })) ?? []}
           onClose={() => setEditingTask(null)}
           onSaved={refreshBoard}
+        />
+      )}
+
+      {editingProject && (
+        <ProjectEditModal
+          project={editingProject}
+          onClose={() => setEditingProject(null)}
+          onSaved={loadProjects}
+          onDeleted={handleProjectDeleted}
         />
       )}
     </div>

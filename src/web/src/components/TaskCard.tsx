@@ -1,19 +1,20 @@
-import { useDraggable } from '@dnd-kit/core';
+import { useSortable } from '@dnd-kit/sortable';
+import { CSS } from '@dnd-kit/utilities';
+import type { CSSProperties } from 'react';
 import type { Task } from '../types.js';
 
-export function TaskCard(props: { task: Task; project: string; onOpenDetail: (task: Task) => void }) {
+/**
+ * 纯展示卡片（不含 dnd hook）。
+ * 供 DragOverlay 复用——overlay 渲染在独立层、不在 SortableContext 内，
+ * 用带 sortable hook 的 TaskCard 会报「找不到 sortable 上下文」。
+ */
+export function TaskCardView(props: { task: Task; onOpenDetail?: (task: Task) => void }) {
   const { task, onOpenDetail } = props;
-  const { attributes, listeners, setNodeRef, transform, isDragging } = useDraggable({ id: task.id });
   const [done, total] = task.progress;
   const pct = total === 0 ? 0 : (done / total) * 100;
-  // 拖拽中的原卡片变半透明占位(DragOverlay 负责实际的浮动卡片)
-  const style: React.CSSProperties = isDragging
-    ? { opacity: 0.4 }
-    : {};
 
   return (
     <div
-      ref={setNodeRef}
       style={{
         background: 'var(--bg-card)',
         margin: '0 0 10px 0',
@@ -22,9 +23,7 @@ export function TaskCard(props: { task: Task; project: string; onOpenDetail: (ta
         boxShadow: 'var(--shadow-sm)',
         border: '1px solid var(--border)',
         cursor: 'grab',
-        ...style,
       }}
-      {...attributes} {...listeners}
     >
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 8 }}>
         <div style={{
@@ -37,7 +36,7 @@ export function TaskCard(props: { task: Task; project: string; onOpenDetail: (ta
         </div>
         <button
           onPointerDown={e => e.stopPropagation()}
-          onClick={e => { e.stopPropagation(); onOpenDetail(task); }}
+          onClick={e => { e.stopPropagation(); onOpenDetail?.(task); }}
           style={{
             fontSize: 12,
             color: 'var(--text-tertiary)',
@@ -86,6 +85,25 @@ export function TaskCard(props: { task: Task; project: string; onOpenDetail: (ta
           {task.main.prompt}
         </div>
       )}
+    </div>
+  );
+}
+
+/**
+ * 栏内可排序卡片：包裹 useSortable，委托 TaskCardView 渲染。
+ * transform/transition 让重排产生平滑动画；isDragging 时原卡片半透明占位。
+ */
+export function TaskCard(props: { task: Task; project: string; onOpenDetail: (task: Task) => void }) {
+  const { task, onOpenDetail } = props;
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: task.id });
+  const sortableStyle: CSSProperties = {
+    transform: CSS.Translate.toString(transform),
+    transition,
+    ...(isDragging ? { opacity: 0.4 } : {}),
+  };
+  return (
+    <div ref={setNodeRef} style={sortableStyle} {...attributes} {...listeners}>
+      <TaskCardView task={task} onOpenDetail={onOpenDetail} />
     </div>
   );
 }

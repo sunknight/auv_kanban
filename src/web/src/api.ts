@@ -28,6 +28,19 @@ export async function renameProject(path: string, name: string): Promise<void> {
     body: JSON.stringify({ path, name }),
   });
 }
+export async function deleteProject(path: string): Promise<void> {
+  await fetch(`${base}/api/projects`, {
+    method: 'DELETE', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ path }),
+  });
+}
+/** 项目列表重排序：paths 为期望的完整新顺序（绝对路径数组） */
+export async function reorderProjects(paths: string[]): Promise<void> {
+  await fetch(`${base}/api/projects/reorder`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ paths }),
+  });
+}
 export async function getBoard(project: string): Promise<Board> {
   const r = await fetch(`${base}/api/board?project=${encodeURIComponent(project)}`);
   return r.json();
@@ -39,10 +52,10 @@ export async function createTask(project: string, name: string): Promise<Task> {
   });
   return r.json();
 }
-export async function moveTask(project: string, id: string, column: string): Promise<void> {
+export async function moveTask(project: string, id: string, column: string, toIndex?: number): Promise<void> {
   await fetch(`${base}/api/tasks/${id}/move`, {
     method: 'POST', headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ project, column }),
+    body: JSON.stringify({ project, column, toIndex }),
   });
 }
 export async function archiveTask(project: string, id: string): Promise<void> {

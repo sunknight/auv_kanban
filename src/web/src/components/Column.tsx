@@ -1,4 +1,5 @@
 import { useDroppable } from '@dnd-kit/core';
+import { SortableContext, verticalListSortingStrategy } from '@dnd-kit/sortable';
 import type { ColumnWithTasks, Task } from '../types.js';
 import { TaskCard } from './TaskCard.js';
 import { NewTaskForm } from './NewTaskForm.js';
@@ -10,6 +11,8 @@ export function Column(props: {
   onTaskCreated?: () => void;
 }) {
   const { setNodeRef, isOver } = useDroppable({ id: props.column.name });
+  // 栏内卡片用 id 数组驱动 SortableContext，决定栏内可排序的项
+  const sortableIds = props.column.tasks.map(t => t.id);
   return (
     <div ref={setNodeRef}
       style={{
@@ -57,9 +60,11 @@ export function Column(props: {
         paddingRight: 4,
       }}>
         {props.column.name === 'backlog' && <NewTaskForm project={props.project} onCreated={props.onTaskCreated} />}
-        {props.column.tasks.map(t => (
-          <TaskCard key={t.id} task={t} project={props.project} onOpenDetail={props.onOpenDetail} />
-        ))}
+        <SortableContext items={sortableIds} strategy={verticalListSortingStrategy}>
+          {props.column.tasks.map(t => (
+            <TaskCard key={t.id} task={t} project={props.project} onOpenDetail={props.onOpenDetail} />
+          ))}
+        </SortableContext>
       </div>
     </div>
   );

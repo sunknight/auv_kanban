@@ -1,5 +1,5 @@
 import type { FastifyInstance } from 'fastify';
-import { listProjects, addProject, removeProject, renameProject, getLastProject, setLastProject } from '../../core/projects.js';
+import { listProjects, addProject, removeProject, renameProject, reorderProjects, getLastProject, setLastProject } from '../../core/projects.js';
 import { resolve } from 'path';
 import type { WatchManager } from '../watch-manager.js';
 
@@ -39,6 +39,13 @@ export function registerProjectRoutes(fastify: FastifyInstance, watchManager: Wa
       reply.code(400);
       return { ok: false, error: (e as Error).message };
     }
+  });
+
+  // 项目列表重排序：body.paths 为期望的完整新顺序（绝对路径数组）
+  fastify.post('/api/projects/reorder', async (req) => {
+    const { paths } = req.body as { paths: string[] };
+    reorderProjects(Array.isArray(paths) ? paths : []);
+    return { ok: true };
   });
 
   // 记录最后打开的项目（0003）：用 `path` 字段（与 /api/projects 一致，不经 preHandler 校验），
