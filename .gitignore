@@ -1,0 +1,5 @@
+node_modules/
+dist/
+src/web/node_modules/
+src/web/dist/
+*.log
