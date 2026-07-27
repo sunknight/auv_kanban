@@ -23,6 +23,11 @@ export class WatchManager {
     this.stoppers.delete(projectPath);
   }
 
+  /** 该项目是否已被监听（健康/协调用，非测试专用） */
+  isWatching(projectPath: string): boolean {
+    return this.stoppers.has(projectPath);
+  }
+
   stopAll(): void {
     for (const stop of this.stoppers.values()) stop();
     this.stoppers.clear();

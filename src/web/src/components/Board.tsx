@@ -14,6 +14,7 @@ export function Board(props: {
   board: BoardT;
   project: string;
   onOpenDetail: (task: Task) => void;
+  onTaskCreated?: () => void;
 }) {
   const [activeId, setActiveId] = useState<string | null>(null);
 
@@ -43,7 +44,7 @@ export function Board(props: {
         height: '100%',
       }}>
         {props.board.columns.map(col => (
-          <Column key={col.name} column={col} project={props.project} onOpenDetail={props.onOpenDetail} />
+          <Column key={col.name} column={col} project={props.project} onOpenDetail={props.onOpenDetail} onTaskCreated={props.onTaskCreated} />
         ))}
       </div>
       {/* 拖拽 overlay:渲染在独立层,永远在最上层,不被栏遮挡 */}

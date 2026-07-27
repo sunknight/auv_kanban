@@ -7,6 +7,7 @@ export function Column(props: {
   column: ColumnWithTasks;
   project: string;
   onOpenDetail: (task: Task) => void;
+  onTaskCreated?: () => void;
 }) {
   const { setNodeRef, isOver } = useDroppable({ id: props.column.name });
   return (
@@ -55,7 +56,7 @@ export function Column(props: {
         overflowX: 'hidden',
         paddingRight: 4,
       }}>
-        {props.column.name === 'backlog' && <NewTaskForm project={props.project} />}
+        {props.column.name === 'backlog' && <NewTaskForm project={props.project} onCreated={props.onTaskCreated} />}
         {props.column.tasks.map(t => (
           <TaskCard key={t.id} task={t} project={props.project} onOpenDetail={props.onOpenDetail} />
         ))}

@@ -1,19 +1,27 @@
 import type { FastifyInstance } from 'fastify';
 import { listProjects, addProject, removeProject, renameProject } from '../../core/projects.js';
 import { resolve } from 'path';
+import type { WatchManager } from '../watch-manager.js';
 
-export function registerProjectRoutes(fastify: FastifyInstance): void {
+export function registerProjectRoutes(fastify: FastifyInstance, watchManager: WatchManager): void {
   fastify.get('/api/projects', async () => ({ projects: listProjects() }));
 
   fastify.post('/api/projects', async (req) => {
     const { path } = req.body as { path: string };
-    addProject(resolve(path));
+    const abs = resolve(path);
+    addProject(abs);
+    // 联动监听：通过 Web UI 添加的项目也必须纳入 watcher，
+    // 否则该项目的 .kanban 变更不会推送 board:changed，前端新建任务后看板不刷新（0002）。
+    watchManager.start(abs);
     return { ok: true };
   });
 
   fastify.delete('/api/projects', async (req) => {
     const { path } = req.body as { path: string };
-    removeProject(resolve(path));
+    const abs = resolve(path);
+    removeProject(abs);
+    // 移除监听，释放 chokidar 句柄，避免对已移除项目的空转监听。
+    watchManager.stop(abs);
     return { ok: true };
   });
 

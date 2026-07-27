@@ -1,13 +1,16 @@
 import { useState } from 'react';
 import { createTask } from '../api.js';
 
-export function NewTaskForm(props: { project: string }) {
+export function NewTaskForm(props: { project: string; onCreated?: () => void }) {
   const [name, setName] = useState('');
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!name.trim()) return;
     await createTask(props.project, name.trim());
     setName('');
+    // 创建成功后主动刷新：不单纯依赖 socket 推送，
+    // 规避 watcher 未覆盖（如 server 启动后才加的项目）或 socket 延迟/断开导致新任务不显示（0002）。
+    props.onCreated?.();
   };
   return (
     <form onSubmit={submit} style={{ display: 'flex', gap: 6, marginBottom: 12 }}>

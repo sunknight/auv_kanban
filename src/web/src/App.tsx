@@ -127,7 +127,7 @@ export function App() {
           flexDirection: 'column',
         }}>
           {board ? (
-            <Board board={board} project={current!} onOpenDetail={setEditingTask} />
+            <Board board={board} project={current!} onOpenDetail={setEditingTask} onTaskCreated={refreshBoard} />
           ) : (
             <div style={{
               flex: 1,
