@@ -8,3 +8,4 @@ src/web/dist/
 .zcode/
 termstep-help.md
 termstep-tool.json
+.kanban/
