@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useEffect, useLayoutEffect, useCallback, useRef } from 'react';
 import { marked } from 'marked';
 import DOMPurify from 'dompurify';
 import type { Task, DocInfo, DocContent } from '../types.js';
@@ -46,6 +46,16 @@ export function TaskModal(props: {
   // 当前 activeDoc 用 ref 持有最新值，供 socket 回调读取（避免闭包陈旧）
   const activeDocRef = useRef<DocInfo | null>(null);
   useEffect(() => { activeDocRef.current = activeDoc; }, [activeDoc]);
+
+  // 描述 textarea：随输入自动调高，避免抖动（用 useLayoutEffect 在绘制前同步定高，
+  // 浏览器不会看到先矮后高的中间态）。先重置为 auto 再读 scrollHeight，拿真实内容高度。
+  const descRef = useRef<HTMLTextAreaElement | null>(null);
+  useLayoutEffect(() => {
+    const ta = descRef.current;
+    if (!ta) return;
+    ta.style.height = 'auto';
+    ta.style.height = `${ta.scrollHeight}px`;
+  }, [description]);
 
   // ESC 关闭
   useEffect(() => {
@@ -319,10 +329,19 @@ export function TaskModal(props: {
         <div>
           <label style={labelStyle}>描述</label>
           <textarea
+            ref={descRef}
+            aria-label="描述"
             value={description}
             onChange={e => setDescription(e.target.value)}
-            rows={3}
-            style={{ ...inputStyle, resize: 'vertical', fontFamily: 'inherit' }}
+            style={{
+              ...inputStyle,
+              resize: 'none',
+              overflow: 'auto',
+              minHeight: 72,
+              maxHeight: 360,
+              height: 72,
+              fontFamily: 'inherit',
+            }}
           />
         </div>
 

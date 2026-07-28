@@ -9,3 +9,4 @@ src/web/dist/
 termstep-help.md
 termstep-tool.json
 .kanban/
+.codegraph/
