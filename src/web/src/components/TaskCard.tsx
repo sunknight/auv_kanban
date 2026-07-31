@@ -1,7 +1,9 @@
 import { useSortable } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
+import { useState } from 'react';
 import type { CSSProperties } from 'react';
 import type { Task } from '../types.js';
+import { copyText, buildRunCommand } from '../clipboard.js';
 
 /**
  * 纯展示卡片（不含 dnd hook）。
@@ -12,9 +14,24 @@ export function TaskCardView(props: { task: Task; onOpenDetail?: (task: Task) =>
   const { task, onOpenDetail } = props;
   const [done, total] = task.progress;
   const pct = total === 0 ? 0 : (done / total) * 100;
+  // 复制执行命令反馈态：复制成功后按钮文本临时变「✓ 已复制」，2 秒后恢复
+  const [copied, setCopied] = useState(false);
+
+  // 点卡片（非按钮、非拖拽）打开详情。
+  // dnd-kit 的 PointerSensor 带 8px 活动阈值：移动 <8px 不激活拖拽，pointerup 后正常派发 click；
+  // 移动 ≥8px 激活拖拽则不派发 click，故点击打开详情与拖拽排序天然不冲突。
+  const handleCopy = async (e: React.MouseEvent) => {
+    e.stopPropagation(); // 不冒泡到卡片（避免触发打开详情）
+    const ok = await copyText(buildRunCommand(task.id, task.name));
+    if (ok) {
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    }
+  };
 
   return (
     <div
+      onClick={() => onOpenDetail?.(task)}
       style={{
         background: 'var(--bg-card)',
         margin: '0 0 10px 0',
@@ -53,8 +70,29 @@ export function TaskCardView(props: { task: Task; onOpenDetail?: (task: Task) =>
         </button>
       </div>
 
-      <div style={{ fontSize: 11, color: 'var(--text-tertiary)', marginTop: 4 }}>
-        #{task.id}
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 4 }}>
+        <div style={{ fontSize: 11, color: 'var(--text-tertiary)' }}>
+          #{task.id}
+        </div>
+        <button
+          onPointerDown={e => e.stopPropagation()}
+          onClick={handleCopy}
+          title="复制在 agent 里执行该任务的命令"
+          style={{
+            fontSize: 11,
+            color: copied ? 'var(--accent)' : 'var(--text-tertiary)',
+            background: 'transparent',
+            border: 'none',
+            padding: '1px 6px',
+            borderRadius: 'var(--radius-sm)',
+            whiteSpace: 'nowrap',
+            cursor: 'pointer',
+          }}
+          onMouseEnter={e => { if (!copied) e.currentTarget.style.color = 'var(--accent)'; }}
+          onMouseLeave={e => { if (!copied) e.currentTarget.style.color = 'var(--text-tertiary)'; }}
+        >
+          {copied ? '✓ 已复制' : '复制'}
+        </button>
       </div>
 
       <div style={{ marginTop: 8 }}>

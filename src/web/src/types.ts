@@ -3,6 +3,8 @@ export interface ParsedMainMd { title: string; description: string; prompt: stri
 export interface Task {
   id: string; name: string; dirName: string; column: string;
   path: string; main: ParsedMainMd | null; progress: [number, number];
+  /** main.md 磁盘修改时间（毫秒）。外部改动判断用。 */
+  mtime?: number;
 }
 export interface ColumnWithTasks { name: string; display: string; tasks: Task[]; }
 export interface Board { columns: ColumnWithTasks[]; }

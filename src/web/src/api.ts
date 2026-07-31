@@ -45,6 +45,12 @@ export async function getBoard(project: string): Promise<Board> {
   const r = await fetch(`${base}/api/board?project=${encodeURIComponent(project)}`);
   return r.json();
 }
+/** 拉取单个任务最新数据（含 mtime），用于 modal 内检测外部改动后同步。 */
+export async function getTask(project: string, id: string): Promise<Task | null> {
+  const r = await fetch(`${base}/api/tasks/${id}?project=${encodeURIComponent(project)}`);
+  if (!r.ok) return null;
+  return r.json();
+}
 export async function createTask(project: string, name: string): Promise<Task> {
   const r = await fetch(`${base}/api/tasks`, {
     method: 'POST', headers: { 'Content-Type': 'application/json' },

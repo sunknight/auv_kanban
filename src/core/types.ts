@@ -68,6 +68,8 @@ export interface Task {
   main: ParsedMainMd | null;
   /** 进度 [完成数, 总数] */
   progress: [number, number];
+  /** main.md 的磁盘修改时间（毫秒，stat.mtimeMs）。用于前端判断任务是否被外部改动（对比暂存时间）。缺失时为 undefined。 */
+  mtime?: number;
 }
 
 /** 全局 config.json 的一个项目条目 */

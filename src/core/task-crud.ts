@@ -1,4 +1,4 @@
-import { mkdirSync, writeFileSync, existsSync, rmSync, readFileSync } from 'fs';
+import { mkdirSync, writeFileSync, existsSync, rmSync, readFileSync, statSync } from 'fs';
 import { join } from 'path';
 import type { Task } from './types.js';
 import { taskEntityPath } from './paths.js';
@@ -46,15 +46,20 @@ export function getTask(projectRoot: string, id: string): Task | null {
   if (!loc) return null;
   const mainPath = join(loc.path, 'main.md');
   let main = null;
+  let mtime: number | undefined;
   if (existsSync(mainPath)) {
     try {
       main = parseMainMd(readFileSync(mainPath, 'utf8'));
     } catch { main = null; }
+    try {
+      mtime = statSync(mainPath).mtimeMs;
+    } catch { mtime = undefined; }
   }
   return {
     ...loc,
     main,
     progress: main ? computeProgress(main) : [0, 0],
+    mtime,
   };
 }
 
