@@ -1,6 +1,6 @@
 ---
 name: kanban
-description: 操作当前项目的 .kanban 看板——按 ID 查看任务、移动栏、勾选子任务、执行任务。当用户说 /kanban、/kanban create（含 --design/--backfill 变体）或提及看板任务时触发。
+description: 操作当前项目的 .kanban 看板——按 ID 查看任务、移动栏、勾选子任务、执行任务。当用户说 /kanban（不带命令时进入 AskUserQuestion 分步询问向导）、/kanban create（含 --design/--backfill 变体）或提及看板任务时触发。
 ---
 
 # Kanban 看板操作 Skill
@@ -28,8 +28,8 @@ description: 操作当前项目的 .kanban 看板——按 ID 查看任务、移
 kanban show <ID>              # 显示任务详情（含当前绝对路径、栏、名称、描述、提示词、子任务带编号/标签）
 kanban list [--column <栏>]   # 列出任务
 kanban new <名称>             # 在 backlog 创建新任务
-kanban update <ID> <需求>     # 对任务追加一条补充需求（写入 ## 子任务，带 [补充] 标签）并重开到 doing
-kanban update --run <ID> <需求> # 同上，但追加后立即执行刚追加的这条（补了就做，避免忘记 run）
+kanban update <ID> <需求>        # 对任务追加一条补充需求（写入 ## 子任务，带 [补充] 标签）并重开到 doing，默认追加后立即执行（补了就做）
+kanban update --no-run <ID> <需求> # 同上，但只补需求、不立即执行（稍后手动 /kanban run）
 kanban move <ID> <栏>         # 移动任务到指定栏（只改 board.yml，实体不动）
 kanban check <ID> <编号>      # 勾选指定编号子任务（设为已完成，非 toggle，幂等）
 kanban uncheck <ID> <编号>    # 取消勾选指定编号子任务（设为未完成，非 toggle，幂等）
@@ -39,6 +39,124 @@ kanban sync                   # 重建所有栏软链以对齐 board.yml（修�
 ```
 
 > **关于 `run` 与 `--design`**：`run` 不是 `kanban` CLI 子命令，而是 skill 层的执行流程（见下方「任务执行流程」），由 agent 解释执行一连串上面的 CLI。`--design` 是 `run` 的 skill 层参数（`/kanban run --design <ID>`），非 CLI flag——作用是只做设计/预研，产出 `design.md`/`plan.md` 后任务回 `ready` 待实施，下次 `/kanban run <ID>` 读已有设计直接进入实施。
+
+## 命令与向导总览脑图
+
+`/kanban` 的全部入口、命令形态与向导分步，一图总览（⇒ 表示「把向导收集到的参数拼成等价斜杠命令」；所有分支最终都落到上方「命令清单」的 CLI 原语执行）：
+
+```text
+/kanban
+│
+├─ 直接带命令（意图明确，不进向导）
+│   ├─ run <ID>                 全流程（设计→实施→收尾）→ done
+│   ├─ run                      取 ready 队首一个 → 全流程 → 完成后问「继续下一个？」
+│   ├─ run --design <ID>        只预研（澄清→design/plan）→ 回 ready 停
+│   ├─ create <标题>                建任务+填描述 → 全流程 → done
+│   ├─ create --design <标题>       建任务+填描述 → 只设计 → 回 ready 停
+│   ├─ create --backfill <标题>     补录会话已做工作 → 落 doing → 问「继续/结束」
+│   └─ update [--no-run] <ID> <需求>  补需求重开 doing → 默认立即执行｜--no-run 稍后 run
+│
+└─ 裸 /kanban（无参数）→ AskUserQuestion 分步向导
+    │  开场 kanban list 拿全栏现状，动态生成选项；.kanban 不存在先问 init
+    │
+    ├─ Q1 做什么？
+    │   ├─ 执行任务 run      （ready 有任务 → 推荐）
+    │   ├─ 新建任务 create   （ready 空 → 推荐）
+    │   ├─ 补充需求 update
+    │   ├─ 查看看板
+    │   └─ Other：低频操作直接说（move/check/uncheck/progress/sync/init/archive/delete）
+    │
+    ├─ run 分支 —— 两题合并一次问
+    │   ├─ 任务？  ready 队首（推荐）｜ready 第 2/3 个｜Other 输 ID
+    │   │          （ready 空 → 改为新建｜返回重选，不列 backlog）
+    │   ├─ 模式？  全流程→done（推荐）｜只预研 --design→回 ready 停
+    │   └─ ⇒ /kanban run [--design] <ID>
+    │
+    ├─ create 分支 —— 三题合并一次问
+    │   ├─ 方式？  新建并执行（推荐）｜只设计 --design｜补录 --backfill
+    │   ├─ 标题？  agent 候选（推荐）｜候选 2｜草稿名后改（H1 可改·目录名冻结）｜Other 输入
+    │   ├─ 描述？  跳过（推荐）｜agent 提炼一句｜Other 输入原始需求
+    │   │          （backfill：描述自动从会话提炼，此题忽略）
+    │   └─ ⇒ /kanban create [--design|--backfill] <标题>（+描述行）
+    │
+    ├─ update 分支 —— 三题合并一次问
+    │   ├─ 任务？    doing 前几个（有则推荐）｜最近 done｜Other 输 ID
+    │   ├─ 补完后？  立即执行（推荐）｜只补不跑 --no-run
+    │   ├─ 需求？    Other 输入文本｜先看子任务清单再答｜取消
+    │   └─ ⇒ kanban update [--no-run] <ID> <需求>
+    │
+    └─ 查看分支（只读）
+        ├─ 看什么？  整板概览（推荐）｜任务详情｜进行中进度
+        ├─ （详情）哪个任务？ 候选列表｜Other 输 ID ⇒ kanban show <ID>
+        └─ 展示即结束，不追问
+```
+
+## 裸 /kanban 交互向导（无参数时分步询问）
+
+用户只输入 `/kanban`（后面不带任何命令、参数、自然语言意图）时，**不猜、不默认执行任何任务**，改用 `AskUserQuestion` 工具分步询问，收集齐参数后拼出等价斜杠命令进入对应流程。
+
+**豁免**：输入已含命令（`/kanban run …`、`/kanban create …`、`/kanban update …`）或自然语言意图明确（「执行 0007」「建个任务修复登录」）时直接走对应流程，**不进向导**。
+
+### 向导总原则（硬性）
+
+1. **全程 `AskUserQuestion` 点击式询问**——禁止纯文本发问；自由文本参数（标题、需求内容、ID）引导用户点 **Other** 输入，一句话即可。每问显式选项 **2-4 个**——Other 由工具自动追加、不计入，不能只给 1 个显式选项。
+2. **合并提问省往返**：`AskUserQuestion` 一次调用最多可带 4 个问题，相互独立的参数**合并进同一次询问**（run 分支两题一问、create/update 分支三题一问），用户一次点选完即开跑；只有「下一步问什么」依赖于上一问答案时才分轮。
+3. **选项动态生成**：开场先执行 `kanban list` 取全栏真实任务（ID+名称+栏），所有任务候选来自这份输出，**绝不凭空编造**；推荐项按现状调整——ready 有任务时首推「执行任务」，ready 空时首推「新建任务」。
+4. **推荐项置首**，标注「（推荐）」。
+5. **问完即执行，不追加确认**：每个参数都是用户亲自点选的，收集齐后直接进入对应流程（run 三阶段 / create / update），不再多问一轮「确认吗」。
+6. **Other 即逃生口**：向导未覆盖的低频操作（move / check / uncheck / progress / sync / init / archive / delete），用户在任一问选 Other 直接说（如「把 0007 挪回 backlog」），按「命令清单」执行对应 CLI，向导不逐项枚举。
+7. **看板未初始化**：`.kanban/` 不存在时，第一问改为「看板未初始化，现在 `kanban init` 吗？」——「初始化（推荐）」/「取消」。
+
+### 第一问：现在要做什么？（单问）
+
+| 选项 | 进入分支 |
+|------|---------|
+| 执行任务（run）——ready 有任务时推荐 | run 分支 |
+| 新建任务（create）——ready 空时推荐 | create 分支 |
+| 给已有任务补需求（update） | update 分支 |
+| 查看看板（list / show / progress） | 查看分支 |
+
+选项的 description 里带一句看板现状摘要（如「ready 2 个，队首 0012 修复分页」），帮用户不看板也能选对。
+
+### run 分支（两题合并一次问）
+
+| 问题 | 选项 |
+|------|------|
+| ① 执行哪个任务？ | ready 队首 `<ID> <名称>`（推荐）；ready 第 2、3 个（若有）；Other 输入任意 4 位 ID |
+| ② 执行模式？ | 全流程：设计+实施 → done（推荐）；只做预研设计（--design）→ 回 ready 停 |
+
+- ready 为空时**不列 backlog 候选**——run 只认 ready 栏，与直接命令的硬性约束一致：①的选项退化为「改为新建任务（转 create 分支，推荐）」/「返回重选（回第一问）」/ Other 输 ID。
+- 收集完拼 `/kanban run [--design] <ID>`，进入「任务执行流程」。
+
+### create 分支（三题合并一次问）
+
+| 问题 | 选项 |
+|------|------|
+| ① 怎么建？ | 新建并立即执行（推荐）；新建只做设计（--design）；补录本会话已在做的工作（--backfill） |
+| ② 标题？ | agent 起草候选（推荐，从会话上下文/看板现状提炼）；第二个候选（若有）；先用草稿名，澄清后再改（H1 可改、目录名冻结）；Other 直接输入 |
+| ③ 附原始描述吗？ | 跳过（推荐，细节留到设计澄清环节逐点问）；由 agent 从上下文提炼一句作背景；Other 输入原始需求 |
+
+- `## 描述` 段创建后冻结，③是留下用户原话的唯一入口——用户有明确需求时应引导 Other 输入；无话可说点「跳过」即可。
+- ①选了 `--backfill`：②的候选从本会话已完成工作提炼；③自动忽略（描述从会话历史提炼）。
+- 收集完拼 `/kanban create [--design|--backfill] <标题>`（③有输入则作为标题后的描述行），进入「一条指令建任务并执行」。
+
+### update 分支（三题合并一次问）
+
+| 问题 | 选项 |
+|------|------|
+| ① 给哪个任务补？ | doing 栏最前 1-3 个 `<ID> <名称>`（有则推荐第一个）；最近 done 的 1 个；Other 输入任意 ID |
+| ② 补完后？ | 立即执行刚补的这条（推荐，默认行为）；只补需求不执行（--no-run） |
+| ③ 补充什么需求？ | Other 输入需求文本；先看该任务子任务清单再答（`kanban show` 展示后重问③）；取消补充 |
+
+- 收集完执行 `kanban update [--no-run] <ID> <需求>`，随后按「对已有任务补需求并重开」处理（默认立即执行）。
+
+### 查看分支（只读，一问；看详情再补一问）
+
+| 问题 | 选项 |
+|------|------|
+| 看什么？ | 整板概览（推荐，各栏任务一览）；某任务详情（追问看哪个：候选列表 / Other 输 ID → `kanban show`）；进行中任务的进度（doing 各任务 `kanban progress`） |
+
+查看为只读操作，结果用纯文本/表格呈现即结束，不追问后续。
 
 ## 任务执行流程（/kanban run，支持 `--design` 预研）
 
@@ -52,7 +170,7 @@ kanban sync                   # 重建所有栏软链以对齐 board.yml（修�
 | `/kanban run`（不带 ID） | 取 ready 队首执行（含设计+实施） | 实施完成（move done） |
 | `/kanban run --design <ID>` | **只做预研/设计**，不实施 | 设计完成（回 ready，停） |
 
-`--design` 的自然语言同义词（与 `update --run` 同一套意图映射规则）：用户说「预研/做设计/做方案/先设计 <ID>」「<ID> 先别动手，只出方案」「<ID> 调研一下怎么做」等表达「只要设计、暂不实施」之意时，一律按 `/kanban run --design <ID>` 处理。
+`--design` 的自然语言同义词（与 `update` 同一套意图映射规则）：用户说「预研/做设计/做方案/先设计 <ID>」「<ID> 先别动手，只出方案」「<ID> 调研一下怎么做」等表达「只要设计、暂不实施」之意时，一律按 `/kanban run --design <ID>` 处理。
 
 ### 步骤 0：确定目标任务（区分有无 ID / 是否预研）
 
@@ -250,15 +368,16 @@ kanban sync                   # 重建所有栏软链以对齐 board.yml（修�
 
 | 用户输入形态 | 判定 | 执行的 CLI |
 |------|------|-----------|
-| `/kanban update --run <ID> <需求>` 或 `/kanban update -r ...` | 显式带 flag | `kanban update --run <ID> <需求>` |
-| `/kanban update <ID> <需求>` （无 flag） | 仅补需求 | `kanban update <ID> <需求>` |
-| "给 0010 补个需求并马上做/立即执行/现在就做：xxx" | 自然语言表达"立即" | `kanban update --run 0010 xxx` |
-| "给 0010 补个需求：xxx" / "0010 还要 xxx" | 自然语言，无"立即"之意 | `kanban update 0010 xxx` |
+| `/kanban update <ID> <需求>` （无 flag） | 默认补完就做 | `kanban update <ID> <需求>` |
+| `/kanban update --no-run <ID> <需求>` | 显式 opt-out | `kanban update --no-run <ID> <需求>` |
+| "给 0010 补个需求：xxx" / "0010 还要 xxx" | 自然语言，默认 | `kanban update 0010 xxx`（默认立即执行） |
+| "给 0010 补个需求，但稍后做/先别做/只补需求：xxx" | 自然语言表达"不立即" | `kanban update --no-run 0010 xxx` |
 
-即：**只要用户表达了"补完就做/立即执行/马上"的意图（无论显式 `--run` 还是自然语言），就走 `--run`；否则只 update 不执行**。`--run` 后 agent 不再等 `/kanban run`，直接接着按 run 流程处理刚追加的编号。
+即：**默认补完就做**（无 flag 时 agent 追加后直接接着按 run 流程处理刚追加的编号，不再等 `/kanban run`）；**只有用户明确表达"稍后做/先别做/只补需求"之意（无论显式 `--no-run` 还是自然语言），才加 `--no-run` 只补需求、不执行**。
 
 1. **追加需求并重开**：`kanban update <ID> <需求文本>` —— 往 `## 子任务` 段追加一条 `- [ ] NN [补充] 需求文本`（编号自动递增），并把任务移到 `doing`（`done` 可回流；`archive` 任务需先解除存档）。
-   - **补了就做**：加 `--run`（或 `-r`）—— `kanban update --run <ID> <需求文本>`。追加后**立即执行刚追加的这条**（agent 接着按 run 流程处理该编号，完成后 `check` 勾上），省去再单独 `/kanban run` 的步骤，避免忘记。
+   - **默认补了就做**：无 flag 时 `kanban update <ID> <需求文本>` 追加后**立即执行刚追加的这条**（agent 接着按 run 流程处理该编号，完成后 `check` 勾上），省去再单独 `/kanban run` 的步骤，避免忘记。
+   - **只补需求、稍后做**：加 `--no-run` —— `kanban update --no-run <ID> <需求文本>`。仅追加并重开到 doing，等用户后续主动 `/kanban run <ID>` 再执行。
 2. **按 run 流程执行**：随后 `/kanban run <ID>`。run 读子任务清单，找**第一个未勾选**的子任务——那就是本轮目标。**已勾选（`[x]`）的子任务视为已执行，跳过**。这样多次 update 堆积的补充需求，每次 run 只处理最早未执行的那条，逐条消化、绝不重复执行。
 3. **补充需求走增量**：带 `[补充]` 标签的子任务，先读已有 `design.md`/`notes.md`/源码作为基线，只实现新需求；文档用追加"第 N 轮"小节，不重写历史段。
 4. **执行后勾上**：`kanban check <ID> <编号>` 把刚完成的子任务标为 `[x]`。
@@ -266,14 +385,22 @@ kanban sync                   # 重建所有栏软链以对齐 board.yml（修�
 
 **示例**：0010 已完成（子任务 01/02 都 `[x]`），事后想到"存档也要二次确认"，又想到"删除也要二次确认"：
 ```
-kanban update 0010 存档也要二次确认   # 追加「- [ ] 03 [补充] 存档也要二次确认」+ 重开
-kanban update 0010 删除也要二次确认   # 追加「- [ ] 04 [补充] 删除也要二次确认」
-kanban show 0010                      # 确认 01/02 已勾选，03/04 待执行
-/kanban run 0010                       # run 取首个未勾选=03，增量实现存档二次确认，完成后 kanban check 0010 03
-/kanban run 0010                       # 下次 run 取 04（03 已勾选跳过），实现删除二次确认
+kanban update 0010 存档也要二次确认            # 默认：追加「- [ ] 03 [补充] 存档也要二次确认」+ 重开，立即执行 03，完成后 kanban check 0010 03
+kanban update --no-run 0010 删除也要二次确认   # 只补需求：追加「- [ ] 04 [补充] 删除也要二次确认」+ 重开，不执行，留待稍后 run
+kanban show 0010                              # 确认 01/02/03 已勾选，04 待执行
+/kanban run 0010                              # 稍后主动 run 取首个未勾选=04，实现删除二次确认
 ```
 
 ## 示例
+
+用户：`/kanban`（仅此，无任何参数）
+你：
+1. `kanban list`（拿全栏现状：ready 2 个、doing 1 个、done 5 个）
+2. `AskUserQuestion` 第一问「现在要做什么？」——「执行任务（推荐）」（description：ready 队首 0012 修复分页）/「新建任务」/「补充需求」/「查看看板」
+3. 用户点「执行任务」→ 第二次 `AskUserQuestion` **两题合并一次问**：「执行哪个任务？」（0012 修复分页（推荐）/ 0014 导出优化 / Other 输 ID）＋「执行模式？」（全流程（推荐）/ 只预研 --design）
+4. 用户点「0012」＋「全流程」→ 相当于 `/kanban run 0012`，进入三阶段流程（阶段 A 设计 → 阶段 B 实施 → 阶段 C 收尾），**不再追问确认**
+
+（若第 2 步用户在 Other 里直接输入「把 0007 挪回 backlog」→ 意图明确，跳过向导直接 `kanban move 0007 backlog`）
 
 用户：`/kanban create 修复登录页空指针`
 用户点"记住我"但没输密码时，提交后白屏。期望此时提示"请输入密码"。
