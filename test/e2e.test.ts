@@ -126,22 +126,22 @@ describe('E2E: 三方协作（人/智能体通过 CLI）', () => {
     expect(run('list', tmp)).not.toContain('0001');
   });
 
-  it('update 追加补充子任务（带 [补充] 标签与递增编号），--run 输出立即执行信号', () => {
+  it('update 追加补充子任务（带 [补充] 标签与递增编号），默认立即执行；--no-run 只补需求', () => {
     run('new 删除存档', tmp);  // 0001
     // 模拟已完成：手写两条已勾选子任务，move done
     const mainPath = join(tmp, '.kanban', 'tasks', '0001-删除存档', 'main.md');
     writeFileSync(mainPath, '# 删除存档\n\n## 描述\n\n## 提示词\n\n## 子任务\n- [x] 01 删除\n- [x] 02 存档\n');
     run('move 0001 done', tmp);
 
-    // 普通 update：已有 01/02，追加 03，提示稍后 run
+    // 默认 update：已有 01/02，追加 03，默认立即执行
     const out1 = run('update 0001 存档要二次确认', tmp);
-    expect(out1).toContain('/kanban run 0001');
+    expect(out1).toContain('立即执行');
     expect(out1).toContain('03');
     expect(run('show 0001', tmp)).toContain('03 [补充] 存档要二次确认');
 
-    // --run：追加 04，输出立即执行信号
-    const out2 = run('update --run 0001 删除要二次确认', tmp);
-    expect(out2).toContain('立即执行');
+    // --no-run：追加 04，只补需求、提示稍后 run
+    const out2 = run('update --no-run 0001 删除要二次确认', tmp);
+    expect(out2).toContain('/kanban run 0001');
     expect(out2).toContain('04');
     expect(out2).toContain('删除要二次确认');
     expect(run('show 0001', tmp)).toContain('04 [补充] 删除要二次确认');
