@@ -50,9 +50,10 @@ kanban skill 在 agent 内执行时，命令分两层：**斜杠命令**（用�
 | 执行任务 run | ① 任务：ready 队首（推荐）/ 第 2、3 个 / Other 输 ID ② 模式：全流程（推荐）/ 只预研 `--design` | `/kanban run [--design] <ID>` |
 | 新建任务 create | ① 方式：新建并执行（推荐）/ `--design` / `--backfill` ② 标题：agent 候选（推荐）/ 草稿名后改 / Other 输入 ③ 描述：跳过（推荐）/ agent 提炼一句 / Other 输入 | `/kanban create [--design/--backfill] <标题>` |
 | 补充需求 update | ① 任务：doing 前几个 / 最近 done / Other 输 ID ② 补完后：立即执行（推荐）/ `--no-run` ③ 需求：Other 输入 / 先看子任务清单 / 取消 | `kanban update [--no-run] <ID> <需求>` |
-| 查看看板 | 整板概览（推荐）/ 任务详情（追问 ID）/ 进行中进度 | `kanban list` / `kanban show <ID>` / `kanban progress` |
+| 查看与速查 | 常用命令速查（推荐，纯文本可复制）/ 整板概览 / 任务详情（追问 ID）/ 进行中进度 | 速查表文本 / `kanban list` / `kanban show <ID>` / `kanban progress` |
 
 - 向导开场先 `kanban list` 拿全栏真实任务，选项动态生成；推荐项随现状调整（ready 有任务→推 run，ready 空→推 create）。
+- `?` 即「帮我问」：`/kanban ?` 等价裸命令进全向导；`/kanban run ?`、`/kanban create ?`、`/kanban update ?` 跳过第一问直入对应分支。
 - 低频操作（move/check/uncheck/sync/init/archive/delete）不进向导：用户在任一问选 Other 直接说，按 CLI 执行。
 - 输入已带命令或意图明确（如「执行 0007」）不进向导，直接走对应流程。
 

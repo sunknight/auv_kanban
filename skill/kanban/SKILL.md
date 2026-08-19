@@ -1,6 +1,6 @@
 ---
 name: kanban
-description: 操作当前项目的 .kanban 看板——按 ID 查看任务、移动栏、勾选子任务、执行任务。当用户说 /kanban（不带命令时进入 AskUserQuestion 分步询问向导）、/kanban create（含 --design/--backfill 变体）或提及看板任务时触发。
+description: 操作当前项目的 .kanban 看板——按 ID 查看任务、移动栏、勾选子任务、执行任务。当用户说 /kanban（裸命令或带 ? 时进入 AskUserQuestion 分步询问向导）、/kanban create（含 --design/--backfill 变体）或提及看板任务时触发。
 ---
 
 # Kanban 看板操作 Skill
@@ -56,14 +56,15 @@ kanban sync                   # 重建所有栏软链以对齐 board.yml（修�
 │   ├─ create --backfill <标题>     补录会话已做工作 → 落 doing → 问「继续/结束」
 │   └─ update [--no-run] <ID> <需求>  补需求重开 doing → 默认立即执行｜--no-run 稍后 run
 │
-└─ 裸 /kanban（无参数）→ AskUserQuestion 分步向导
+└─ 裸 /kanban 或 /kanban ? → AskUserQuestion 分步向导
+    │  （/kanban run|create|update ? ⇒ 跳过 Q1 直入对应分支）
     │  开场 kanban list 拿全栏现状，动态生成选项；.kanban 不存在先问 init
     │
-    ├─ Q1 做什么？
+    ├─ Q1 做什么？（直入分支时跳过）
     │   ├─ 执行任务 run      （ready 有任务 → 推荐）
     │   ├─ 新建任务 create   （ready 空 → 推荐）
     │   ├─ 补充需求 update
-    │   ├─ 查看看板
+    │   ├─ 查看/速查
     │   └─ Other：低频操作直接说（move/check/uncheck/progress/sync/init/archive/delete）
     │
     ├─ run 分支 —— 两题合并一次问
@@ -85,17 +86,27 @@ kanban sync                   # 重建所有栏软链以对齐 board.yml（修�
     │   ├─ 需求？    Other 输入文本｜先看子任务清单再答｜取消
     │   └─ ⇒ kanban update [--no-run] <ID> <需求>
     │
-    └─ 查看分支（只读）
-        ├─ 看什么？  整板概览（推荐）｜任务详情｜进行中进度
+    └─ 查看/速查分支（只读）
+        ├─ 看什么？  常用命令速查（推荐）｜整板概览｜任务详情｜进行中进度
+        ├─ 速查 ⇒ 纯文本输出命令速查表（顶部带看板现状行），复制即用，不追问
         ├─ （详情）哪个任务？ 候选列表｜Other 输 ID ⇒ kanban show <ID>
         └─ 展示即结束，不追问
 ```
 
 ## 裸 /kanban 交互向导（无参数时分步询问）
 
-用户只输入 `/kanban`（后面不带任何命令、参数、自然语言意图）时，**不猜、不默认执行任何任务**，改用 `AskUserQuestion` 工具分步询问，收集齐参数后拼出等价斜杠命令进入对应流程。
+用户输入 `/kanban ?`、裸 `/kanban`（后面不带任何命令、参数、自然语言意图），或 `/kanban <分支> ?`（如 `/kanban run ?`）时，**不猜、不默认执行任何任务**，改用 `AskUserQuestion` 工具分步询问，收集齐参数后拼出等价斜杠命令进入对应流程。
 
-**豁免**：输入已含命令（`/kanban run …`、`/kanban create …`、`/kanban update …`）或自然语言意图明确（「执行 0007」「建个任务修复登录」）时直接走对应流程，**不进向导**。
+**向导进入方式（`?` 即「帮我问」）**：
+
+| 输入 | 行为 |
+|------|------|
+| `/kanban`（裸）或 `/kanban ?` | 从第一问「做什么？」开始的完整向导 |
+| `/kanban run ?` | 跳过第一问，直接进 run 分支（两题合并一次问） |
+| `/kanban create ?` | 直接进 create 分支（三题合并一次问） |
+| `/kanban update ?` | 直接进 update 分支（三题合并一次问） |
+
+**豁免**：输入已含命令与实参（`/kanban run 0007`、`/kanban create 修登录`…）或自然语言意图明确（「执行 0007」「建个任务修复登录」）时直接走对应流程，**不进向导**；唯一例外是命令后只跟 `?`——那是显式要求进向导（查看/速查分支无 `?` 直入形态，经第一问进入）。
 
 ### 向导总原则（硬性）
 
@@ -107,14 +118,14 @@ kanban sync                   # 重建所有栏软链以对齐 board.yml（修�
 6. **Other 即逃生口**：向导未覆盖的低频操作（move / check / uncheck / progress / sync / init / archive / delete），用户在任一问选 Other 直接说（如「把 0007 挪回 backlog」），按「命令清单」执行对应 CLI，向导不逐项枚举。
 7. **看板未初始化**：`.kanban/` 不存在时，第一问改为「看板未初始化，现在 `kanban init` 吗？」——「初始化（推荐）」/「取消」。
 
-### 第一问：现在要做什么？（单问）
+### 第一问：现在要做什么？（单问；`/kanban <分支> ?` 直入时跳过本问）
 
 | 选项 | 进入分支 |
 |------|---------|
 | 执行任务（run）——ready 有任务时推荐 | run 分支 |
 | 新建任务（create）——ready 空时推荐 | create 分支 |
 | 给已有任务补需求（update） | update 分支 |
-| 查看看板（list / show / progress） | 查看分支 |
+| 查看与速查（看板 / 常用命令） | 查看/速查分支 |
 
 选项的 description 里带一句看板现状摘要（如「ready 2 个，队首 0012 修复分页」），帮用户不看板也能选对。
 
@@ -150,13 +161,31 @@ kanban sync                   # 重建所有栏软链以对齐 board.yml（修�
 
 - 收集完执行 `kanban update [--no-run] <ID> <需求>`，随后按「对已有任务补需求并重开」处理（默认立即执行）。
 
-### 查看分支（只读，一问；看详情再补一问）
+### 查看/速查分支（只读，一问；看详情再补一问）
 
 | 问题 | 选项 |
 |------|------|
-| 看什么？ | 整板概览（推荐，各栏任务一览）；某任务详情（追问看哪个：候选列表 / Other 输 ID → `kanban show`）；进行中任务的进度（doing 各任务 `kanban progress`） |
+| 看什么？ | 常用命令速查（推荐，输出可复制的命令速查表）；整板概览（各栏任务一览）；某任务详情（追问看哪个：候选列表 / Other 输 ID → `kanban show`）；进行中任务的进度（doing 各任务 `kanban progress`） |
 
-查看为只读操作，结果用纯文本/表格呈现即结束，不追问后续。
+**常用命令速查**：用纯文本代码块直接输出下方速查表，**顶部加一行当前看板现状**（来自开场 `kanban list`，如「ready 2 个，队首 0012 修复分页；doing 1 个」）。输出即停、不追问——用户复制某条命令直接输入，按「豁免」规则带命令执行，不回向导。
+
+```text
+# 常用命令速查（复制即用，<ID> 换成 4 位任务号）
+/kanban run                       # 取 ready 队首执行（全流程 → done）
+/kanban run <ID>                  # 执行指定任务（全流程）
+/kanban run --design <ID>         # 只预研设计 → 回 ready 停，不实施
+/kanban create <标题>             # 一句话建任务并立即执行（首行=标题，后续行=描述）
+/kanban create --design <标题>    # 建任务只做设计
+/kanban create --backfill <标题>  # 补录本会话已在做的工作（落 doing）
+/kanban update <ID> <需求>        # 补需求并重开，默认立即执行
+/kanban update --no-run <ID> <需求>  # 只补需求，稍后手动 run
+# 参数记不清？命令后加 ? 进分步向导：/kanban ? 全向导；run/create/update ? 直入分支
+# 查看类（也可直接说「看看板」「0007 进度」）：
+kanban list [--column ready|doing|backlog|done]    # 列任务
+kanban show <ID> / kanban progress <ID>            # 详情 / 进度
+```
+
+其余查看为只读操作，结果用纯文本/表格呈现即结束，不追问后续。
 
 ## 任务执行流程（/kanban run，支持 `--design` 预研）
 
@@ -396,7 +425,7 @@ kanban show 0010                              # 确认 01/02/03 已勾选，04 �
 用户：`/kanban`（仅此，无任何参数）
 你：
 1. `kanban list`（拿全栏现状：ready 2 个、doing 1 个、done 5 个）
-2. `AskUserQuestion` 第一问「现在要做什么？」——「执行任务（推荐）」（description：ready 队首 0012 修复分页）/「新建任务」/「补充需求」/「查看看板」
+2. `AskUserQuestion` 第一问「现在要做什么？」——「执行任务（推荐）」（description：ready 队首 0012 修复分页）/「新建任务」/「补充需求」/「查看与速查」
 3. 用户点「执行任务」→ 第二次 `AskUserQuestion` **两题合并一次问**：「执行哪个任务？」（0012 修复分页（推荐）/ 0014 导出优化 / Other 输 ID）＋「执行模式？」（全流程（推荐）/ 只预研 --design）
 4. 用户点「0012」＋「全流程」→ 相当于 `/kanban run 0012`，进入三阶段流程（阶段 A 设计 → 阶段 B 实施 → 阶段 C 收尾），**不再追问确认**
 
