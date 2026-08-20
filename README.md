@@ -1,15 +1,19 @@
 # Auv Kanban
 
-**A**gent **U**ser **V**elocity —— 基于 Markdown 文件 + 目录的**人 / 智能体共用看板**。完全无数据库，看板数据随项目 git 管理；人与 ZCode 智能体通过文件系统这块共享黑板协作。
+**A**gent **U**ser **V**elocity —— 基于 Markdown 文件 + 目录的**人 / 智能体共用看板**。完全无数据库，看板数据随项目 git 管理；人与智能体通过文件系统这块共享黑板协作。
 
 > 📖 完整使用说明见 [docs/USAGE.md](docs/USAGE.md) ｜ 发布流程见 [docs/RELEASE.md](docs/RELEASE.md)
+
+![任务详情界面：左侧编辑任务、右侧查看文档（logs.md 执行进展准实时可见）](docs/screenshot-2.png)
 
 ## 特性
 
 - **Markdown + 目录驱动**：任务实体是 `.kanban/tasks/` 下的子目录（含 main.md + 素材），栏归属（状态）记录在 `board.yml`。
 - **随项目版本管理**：看板数据在项目 `.kanban/` 下，纳入 git。
-- **三方共用**：人（Web UI / CLI）、Web 服务（可视化层）、ZCode 智能体（Skill + CLI）共用文件系统。
+- **三方共用**：人（Web UI / CLI）、Web 服务（可视化层）、智能体（Skill + CLI）共用文件系统。
+- **CLI 由 Skill 驱动**：`kanban` CLI 是智能体的执行原语——Skill 解释 `/kanban` 斜杠命令时自动调用它们；日常人只需 Web UI 和斜杠命令，一般无需手工执行 CLI（需要时也随时可用）。
 - **稳定路径**：任务实体目录创建后冻结——永不移动、永不改名（改标题只重写 H1），写入永远按 ID 定位到 `tasks/<ID>-<名>/`。栏目录是只读软链视图，改进度只改 board.yml。
+- **产物随任务沉淀**：执行过程中生成的所有文档（design.md 设计、plan.md 计划、logs.md 执行日志、notes.md 总结、readme.md 使用说明）一律写入任务自己的目录，绝不散落到项目其他位置——一个任务一个文件夹，归纳、检索、回溯一目了然。
 - **子目录即用**：在项目任意子目录执行 `kanban`（list/show/new/move/check/progress/sync/delete），会从当前目录向上查找最近的 `.kanban` 作为项目根；存在多个 `.kanban` 时取最近的（最深）父目录。`kanban init` 例外，始终在当前目录创建新的看板。
 
 ## 安装
@@ -39,7 +43,7 @@ kanban new "优化首页加载"
 # 5. 挪到 ready（允许执行）
 kanban move 0001 ready
 
-# 6. 在 ZCode 里触发智能体执行
+# 6. 在智能体里触发执行（参数记不清就裸输 /kanban 走向导）
 #    /kanban run 0001
 ```
 
@@ -92,9 +96,12 @@ kanban move 0001 ready
 | `kanban new <名称>` | 在 backlog 创建任务 |
 | `kanban show <ID>` | 显示任务详情（含当前绝对路径） |
 | `kanban move <ID> <栏>` | 移动任务到指定栏（只改 board.yml，实体不动） |
-| `kanban check <ID> <序号>` | toggle 第 N 个子任务勾选 |
+| `kanban check <ID> <编号>` | 勾选指定编号子任务（设为已完成，幂等；编号为 2 位数字，如 03） |
+| `kanban uncheck <ID> <编号>` | 取消勾选指定编号子任务（设为未完成，幂等） |
+| `kanban update [--no-run] <ID> <需求>` | 对任务追加补充需求（写入子任务，带 [补充] 标签）并重开到 doing；默认追加后立即执行，`--no-run` 只补需求不执行 |
 | `kanban progress <ID>` | 显示任务进度 |
 | `kanban sync` | 重建栏软链以对齐 board.yml（Linux/macOS）；Windows 下仅做 board.yml 自愈（孤儿归 backlog、清除幽灵 id） |
+| `kanban archive <ID>` | 存档任务（从看板隐藏，实体移入 .kanban/archive/，文档保留） |
 | `kanban delete <ID>` | 删除任务（实体目录，ID 不回收） |
 | `kanban projects [add|remove] [path]` | 管理全局项目列表 |
 
@@ -114,9 +121,39 @@ kanban skill install --all              # 给全部已知 agent 装（目录不�
 - Windows：因普通用户无 symlink 权限，不会自动建软链，而是对选中的目标打印手动复制指引（PowerShell 命令）。
 - 未知 agent id 会报错并列出全部可选项。
 
-## 智能体执行
+## Skill：智能体的看板入口
 
-装好 Skill 后，在 ZCode 里 `/kanban run <ID>` 触发。智能体会：
+`kanban skill install` 装的是一个 Skill（[skill/kanban/SKILL.md](skill/kanban/SKILL.md)），它教会智能体一整套 `/kanban` 斜杠命令——从建任务、执行、补需求到补录进行中的工作，全程挂在看板上推进。这些命令由智能体解释执行（背后就是上面的 CLI 原语），不是 CLI 子命令。
+
+| 斜杠命令 | 说明 |
+|---|---|
+| `/kanban run <ID>` | 执行指定任务：设计 → 实施 → 收尾，完成 move done |
+| `/kanban run` | 取 ready 队首一个执行；完成后询问「继续下一个？」 |
+| `/kanban run --design <ID>` | 只做预研设计（产出 design.md / plan.md）回 ready 待实施；下次 run 复用已有设计直接进实施 |
+| `/kanban create <标题>` | 一句话建任务并立即执行（首行=标题，后续行=描述） |
+| `/kanban create --design <标题>` | 建任务后只做设计 |
+| `/kanban create --backfill <标题>` | **把会话中已开干、但忘了从看板任务起步的工作补录为任务** |
+| `/kanban update [--no-run] <ID> <需求>` | 给已有任务追加补充需求并重开到 doing，默认立即执行；`--no-run` 只补不跑 |
+| `/kanban`（裸）或 `/kanban ?` | 分步询问向导（见下） |
+
+### 裸 / 与 ? 分步向导
+
+裸输 `/kanban`（后面不带任何命令、参数）或 `/kanban ?` 时，智能体**不猜、不默认执行任何任务**，改用点击式分步询问收集参数：第一问「现在要做什么」（执行任务 / 新建任务 / 补充需求 / 查看与速查），选定分支后把该分支的几个参数合并一次问齐，点完即开跑。选项全部来自看板真实任务动态生成，推荐项随看板现状调整（ready 有任务首推执行、ready 空首推新建）。
+
+参数记不清时，命令后加 `?` 可直入对应分支：`/kanban run ?`、`/kanban create ?`、`/kanban update ?`。查看/速查分支还会输出一份顶部带看板现状、复制即用的命令速查表。
+
+### 补录执行中的工作（create --backfill）
+
+会话干到一半才发现没从看板任务起步？`/kanban create --backfill <标题>` 把这段工作补录为任务，让剩余工作挂在任务下继续推进：
+
+1. 回溯会话**真实做过**的工作，拆成子任务并标 `[x]`；识别出的后续待办标 `[ ]`——已做与未做如实区分
+2. 从会话实际改动提炼 `design.md` / `plan.md`，并往 `logs.md` 写一条「补录」记录
+3. 任务落 **doing**（不是 done）——补录是承接后续会话，不是事后归档
+4. 补录后询问下一步：「继续做下一项」（接着 run 实施剩余子任务）/「结束任务」（仍有未完成项时先提醒、确认后才收尾）
+
+### 执行流程（/kanban run）
+
+`/kanban run <ID>` 触发后，智能体会：
 1. `kanban show <ID>` 读任务路径与提示词
 2. `kanban move <ID> doing`
 3. 创建 `logs.md` 写第一条进展（开始执行、起始时间）

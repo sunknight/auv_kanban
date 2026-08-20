@@ -17,7 +17,7 @@ export const HELP_QUICK_START = `## 30 秒上手
 3. **起 Web 界面**：执行 \`kanban serve\`，浏览器打开提示的本机地址（默认端口 38311）。
 4. **新建任务**：在 Web 里点对应栏的「+」，或命令行 \`kanban new "任务名"\`。
 5. **准备执行**：把任务挪到 **ready**（允许执行）。
-6. **让智能体干活**：在 ZCode 里 \`/kanban run\`（自动取 ready 队首）或 \`/kanban run 0001\`。
+6. **让智能体干活**：在智能体里 \`/kanban run\`（自动取 ready 队首）或 \`/kanban run 0001\`；一句话 \`/kanban create 标题\` 建任务并直接执行；参数记不清就裸输 \`/kanban\` 走分步向导。
 7. **看实时进度**：Web 详情里打开 \`logs.md\`，可看智能体增量写入的执行过程。
 
 > 核心心智模型：任务实体是 \`.kanban/tasks/<ID>-名/\` 下的目录，**永不移动、永不改名**；
@@ -44,13 +44,15 @@ kanban init
 
 ## 三、装 Skill（让智能体能用，每台机器一次）
 
+Skill 可装到各智能体（zcode / claude / codex / gemini 等）的 skills 目录。
+
 **macOS / Linux**
 
 \`\`\`bash
 kanban skill install
 \`\`\`
 
-自动创建软链 \`~/.zcode/skills/kanban\` → 包内的 \`skill/kanban/\`。
+默认探测本机已装的智能体全部装上，各建软链 \`~/<agent>/skills/kanban\` → 包内的 \`skill/kanban/\`（改一次源全部生效）；\`--agent claude,codex\` 指定目标，\`--list\` 只看探测结果。
 
 **Windows**
 
@@ -72,12 +74,32 @@ kanban serve --port 4000     # 指定端口
 | \`kanban list --column ready\` | 只看某栏 |
 | \`kanban show <ID>\` | 看任务详情 |
 | \`kanban move <ID> ready\` | 把任务挪到指定栏 |
-| \`kanban check <ID> <序号>\` | 勾选/取消第 N 个子任务 |
+| \`kanban check <ID> <编号>\` | 勾选子任务（编号 2 位，如 03；幂等） |
+| \`kanban uncheck <ID> <编号>\` | 取消勾选子任务 |
+| \`kanban update [--no-run] <ID> <需求>\` | 追加补充需求并重开到 doing；默认立即执行，\`--no-run\` 只补不跑 |
 | \`kanban progress <ID>\` | 看任务进度 |
 | \`kanban sync\` | 对齐 board.yml：重建栏软链、修复孤儿与幽灵 id |
 | \`kanban delete <ID>\` | 删除任务 |
 
-## 六、典型工作流
+## 六、智能体协作：/kanban 斜杠命令
+
+装好 Skill 后，在智能体会话里用斜杠命令操作看板（由智能体解释执行，各智能体的触发语法以其自身为准）：
+
+| 斜杠命令 | 说明 |
+|---|---|
+| \`/kanban run <ID>\` | 执行指定任务：设计 → 实施 → 收尾 |
+| \`/kanban run\` | 取 ready 队首执行，完成后询问是否继续下一个 |
+| \`/kanban run --design <ID>\` | 只做预研设计，产出设计/计划文档后回 ready 待实施；下次 run 复用设计直接实施 |
+| \`/kanban create <标题>\` | 一句话建任务并立即执行（首行=标题，后续行=描述） |
+| \`/kanban create --design <标题>\` | 建任务后只做设计 |
+| \`/kanban create --backfill <标题>\` | 把会话中已开干、忘了从看板起步的工作补录为任务 |
+| \`/kanban update [--no-run] <ID> <需求>\` | 给已有任务补需求并重开，默认立即执行 |
+| \`/kanban\`（裸）或 \`/kanban ?\` | 分步询问向导 |
+
+- **分步向导**：裸输 \`/kanban\` 或 \`/kanban ?\` 时，智能体不猜、不默认执行，改用点击式分步问齐参数后开跑（第一问：执行任务 / 新建任务 / 补充需求 / 查看与速查）；命令后加 \`?\`（如 \`/kanban run ?\`）跳过第一问直入对应分支。选项来自看板真实任务动态生成。
+- **补录执行中的工作（--backfill）**：会话干到一半才想起没建任务？\`/kanban create --backfill <标题>\` 回溯会话真实工作——已完成的子任务标 \`[x]\`、剩余待办标 \`[ ]\`，并从实际改动提炼设计文档；任务落 **doing** 继续推进（不是事后归档），补录后询问「继续做下一项 / 结束任务」。
+
+## 七、典型工作流
 
 \`\`\`bash
 # 1. 记录想法
@@ -86,7 +108,7 @@ kanban new "优化首页加载"
 # 2. 可以做了，挪到 ready
 kanban move 0001 ready
 
-# 3. 在 ZCode 里触发智能体执行（需先装 Skill）
+# 3. 在智能体里触发执行（需先装 Skill，斜杠命令见上节）
 #    /kanban run 0001
 #    智能体自动：move 到 doing → 写 logs.md → 干活 → 勾子任务 → 完成后 move done
 
@@ -95,7 +117,7 @@ kanban show 0001
 kanban progress 0001
 \`\`\`
 
-## 七、数据长什么样
+## 八、数据长什么样
 
 \`\`\`
 your-project/.kanban/
@@ -110,14 +132,14 @@ your-project/.kanban/
 
 关键特性：**任务实体路径稳定**（永远在 \`tasks/<ID>-名>/\`，改名只改 main.md 的 H1，不动目录），人和智能体可放心并发读写。
 
-## 八、常见问题
+## 九、常见问题
 
 - **在子目录里能用吗？** 能。\`kanban\` 会自动向上查找最近的 \`.kanban\`。
 - **软链断了 / 栏目录乱了？** 跑一次 \`kanban sync\` 即可（macOS/Linux）。
 - **Windows 支持吗？** 支持。栏目录软链视图自动跳过（数据不依赖软链），Skill 需手动复制一次。
 - **不想用 Web，只用命令行？** 完全可以，所有操作都有对应 CLI。
 
-## 九、安全使用须知
+## 十、安全使用须知
 
 \`kanban serve\` 按**本地单用户工具**定位：
 
