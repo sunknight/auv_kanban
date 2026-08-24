@@ -2,9 +2,10 @@ import { useState, useEffect, useLayoutEffect, useCallback, useRef, useMemo } fr
 import { marked } from 'marked';
 import DOMPurify from 'dompurify';
 import type { Task, DocInfo, DocContent } from '../types.js';
-import { updateTask, moveTask, listDocs, readDoc, archiveTask, deleteTask, subscribeBoard, getTask } from '../api.js';
+import { updateTask, moveTask, listDocs, readDoc, archiveTask, deleteTask, subscribeBoard, getTask, addTodo } from '../api.js';
 import { loadDraft, saveDraft, clearDraft } from '../drafts.js';
 import { copyText, buildRunCommand } from '../clipboard.js';
+import { TodoPreview } from './TodoPreview.js';
 
 interface EditableSubtask {
   no?: string;
@@ -69,6 +70,14 @@ export function TaskModal(props: {
 
   // 复制执行命令反馈态
   const [copied, setCopied] = useState(false);
+
+  // todo.md 添加表单：预览 todo.md 时点「＋添加」弹出；任务尚无 todo.md 时文档区
+  // 显示「＋ todo.md」占位标签，点它同样弹出——提交成功才真正建文件，取消不产生文件。
+  const [todoFormOpen, setTodoFormOpen] = useState(false);
+  const [todoTitle, setTodoTitle] = useState('');
+  const [todoContent, setTodoContent] = useState('');
+  const [addingTodo, setAddingTodo] = useState(false);
+  const [todoFormError, setTodoFormError] = useState('');
 
   // 文档预览区滚动容器：重载 logs.md 后滚到底（看最新进展）
   const previewScrollRef = useRef<HTMLDivElement | null>(null);
@@ -138,8 +147,29 @@ export function TaskModal(props: {
     readDoc(project, task.id, doc.name)
       .then(c => { setDocContent(c); })
       .catch(() => { setDocError('文档读取失败'); })
-      .finally(() => { setDocLoading(false); });
+      .finally(() => setDocLoading(false));
   }, [project, task.id]);
+
+  // 提交添加 todo：append（文件不存在则建）→ 刷新文档列表（占位标签消失）→
+  // 打开 todo.md 预览显示新事项 → 刷新看板（卡片 todo 标签计数同步）
+  const submitTodo = async () => {
+    if (!todoTitle.trim() || addingTodo) return;
+    setAddingTodo(true);
+    setTodoFormError('');
+    try {
+      await addTodo(project, task.id, todoTitle, todoContent);
+      setTodoFormOpen(false);
+      setTodoTitle('');
+      setTodoContent('');
+      listDocs(project, task.id).then(setDocs).catch(() => { /* 静默 */ });
+      openDoc({ name: 'todo.md', ext: 'md', isImage: false });
+      onSaved();
+    } catch {
+      setTodoFormError('添加失败，请重试');
+    } finally {
+      setAddingTodo(false);
+    }
+  };
 
   // 重载当前预览文档的内容（手动刷新按钮、socket 自动刷新共用）。
   // 仅对 markdown/text 类文档有意义；logs.md 重载后滚到底看最新进展。
@@ -181,9 +211,12 @@ export function TaskModal(props: {
       listDocs(project, task.id)
         .then(list => { setDocs(list); })
         .catch(() => { /* 静默：列表刷新失败不影响内容预览 */ });
-      // 若正在看 logs.md，重载内容并滚到底
-      if (activeDocRef.current?.name === 'logs.md') {
+      // 若正在看 logs.md（滚到底看最新进展）或 todo.md（同步外部勾选），重载内容
+      const curDoc = activeDocRef.current?.name;
+      if (curDoc === 'logs.md') {
         reloadActiveDoc({ scrollToBottom: true });
+      } else if (curDoc === 'todo.md') {
+        reloadActiveDoc();
       }
       // 重载任务，处理外部改动
       getTask(project, task.id).then(latest => {
@@ -557,10 +590,11 @@ export function TaskModal(props: {
           <label style={{ ...labelStyle, marginBottom: 2 }}>任务文档</label>
           {docsLoading ? (
             <div style={{ fontSize: 12, color: 'var(--text-tertiary)', padding: '4px 0' }}>加载中…</div>
-          ) : docs.length === 0 ? (
-            <div style={{ fontSize: 12, color: 'var(--text-tertiary)', padding: '4px 0' }}>（暂无文档）</div>
           ) : (
-            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, alignItems: 'center' }}>
+              {docs.length === 0 && (
+                <span style={{ fontSize: 12, color: 'var(--text-tertiary)', padding: '4px 0' }}>（暂无文档）</span>
+              )}
               {docs.map(d => (
                 <button
                   key={d.name}
@@ -577,6 +611,17 @@ export function TaskModal(props: {
                   {d.isImage ? '🖼 ' : '📄 '}{d.name}
                 </button>
               ))}
+              {!docs.some(d => d.name === 'todo.md') && (
+                <button
+                  onClick={() => { setTodoFormOpen(true); setTodoFormError(''); }}
+                  title="记录一条延后事项——提交后自动创建 todo.md（取消不会产生文件）"
+                  style={{
+                    border: '1px dashed var(--border)', background: 'transparent',
+                    color: 'var(--text-tertiary)', fontSize: 12, padding: '4px 10px',
+                    borderRadius: 'var(--radius-sm)', cursor: 'pointer',
+                  }}
+                >＋ todo.md</button>
+              )}
             </div>
           )}
 
@@ -594,14 +639,30 @@ export function TaskModal(props: {
                   fontSize: 12, color: 'var(--text-secondary)',
                 }}>
                   <span style={{ fontWeight: 600 }}>
-                    {activeDoc.name === 'logs.md' ? '📋 执行进展' : activeDoc.name}
+                    {activeDoc.name === 'logs.md' ? '📋 执行进展' : activeDoc.name === 'todo.md' ? '🗒 延后事项' : activeDoc.name}
                     {activeDoc.name === 'logs.md' && (
                       <span style={{ fontWeight: 400, color: 'var(--text-tertiary)', marginLeft: 6 }}>
                         （文件变化自动刷新）
                       </span>
                     )}
+                    {activeDoc.name === 'todo.md' && (
+                      <span style={{ fontWeight: 400, color: 'var(--text-tertiary)', marginLeft: 6 }}>
+                        （点选勾选框即标记完成）
+                      </span>
+                    )}
                   </span>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                    {activeDoc.name === 'todo.md' && (
+                      <button
+                        onClick={() => { setTodoFormOpen(true); setTodoFormError(''); }}
+                        title="追加一条延后事项到 todo.md 末尾"
+                        style={{
+                          border: 'none', background: 'transparent', color: 'var(--text-tertiary)',
+                          cursor: 'pointer', fontSize: 12, padding: '0 4px', lineHeight: 1,
+                        }}
+                        aria-label="添加 todo"
+                      >＋添加</button>
+                    )}
                     <button
                       onClick={() => reloadActiveDoc({ scrollToBottom: activeDoc.name === 'logs.md' })}
                       disabled={docLoading}
@@ -630,6 +691,13 @@ export function TaskModal(props: {
                     <div style={{ fontSize: 12, color: '#b91c1c' }}>{docError}</div>
                   ) : docContent == null ? null : docContent.type === 'image' ? (
                     <img src={docContent.dataUrl} alt={activeDoc.name} style={{ maxWidth: '100%', borderRadius: 'var(--radius-sm)' }} />
+                  ) : docContent.type === 'markdown' && activeDoc.name === 'todo.md' ? (
+                    <TodoPreview
+                      content={docContent.content}
+                      project={project}
+                      taskId={task.id}
+                      onChanged={() => { reloadActiveDoc(); onSaved(); }}
+                    />
                   ) : docContent.type === 'markdown' ? (
                     <div
                       className="md-preview"
@@ -652,6 +720,64 @@ export function TaskModal(props: {
         </div>
         </div>
         {/* 左右双列区结束 */}
+
+        {/* todo 添加表单浮层：盖在 modal 之上（zIndex 更高），点遮罩关闭 */}
+        {todoFormOpen && (
+          <div
+            onClick={() => { if (!addingTodo) setTodoFormOpen(false); }}
+            style={{
+              position: 'fixed', inset: 0, background: 'rgba(0, 0, 0, 0.35)',
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              zIndex: 1100,
+            }}
+          >
+            <div
+              onClick={e => e.stopPropagation()}
+              style={{
+                background: '#fff', borderRadius: 'var(--radius-md)',
+                boxShadow: '0 10px 40px rgba(0,0,0,0.2)', width: 420, maxWidth: '90vw',
+                padding: 20, display: 'flex', flexDirection: 'column', gap: 12,
+              }}
+            >
+              <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--text-primary)' }}>添加延后事项</div>
+              <div>
+                <label style={labelStyle}>标题（单行）</label>
+                <input
+                  value={todoTitle}
+                  onChange={e => setTodoTitle(e.target.value)}
+                  placeholder="如 支持导出 PDF"
+                  style={inputStyle}
+                  autoFocus
+                  onKeyDown={e => { if (e.key === 'Enter') submitTodo(); }}
+                />
+              </div>
+              <div>
+                <label style={labelStyle}>内容（可选，多行，写在标题下方）</label>
+                <textarea
+                  value={todoContent}
+                  onChange={e => setTodoContent(e.target.value)}
+                  placeholder={'补充说明、背景、参考……\n不要用 - [ ] 开头（会被认成新事项）'}
+                  style={{ ...inputStyle, resize: 'vertical', minHeight: 72, fontFamily: 'inherit' }}
+                />
+              </div>
+              {todoFormError && (
+                <div style={{ fontSize: 12, color: '#b91c1c' }}>{todoFormError}</div>
+              )}
+              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8 }}>
+                <button
+                  onClick={() => setTodoFormOpen(false)}
+                  disabled={addingTodo}
+                  style={{ ...btnSecondary, cursor: 'pointer' }}
+                >取消</button>
+                <button
+                  onClick={submitTodo}
+                  disabled={addingTodo || !todoTitle.trim()}
+                  style={{ ...btnPrimary, opacity: addingTodo || !todoTitle.trim() ? 0.6 : 1, cursor: addingTodo ? 'not-allowed' : 'pointer' }}
+                >{addingTodo ? '添加中...' : '添加'}</button>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );

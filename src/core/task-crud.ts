@@ -1,11 +1,12 @@
 import { mkdirSync, writeFileSync, existsSync, rmSync, readFileSync, statSync } from 'fs';
 import { join } from 'path';
-import type { Task } from './types.js';
+import type { Task, TodoItem } from './types.js';
 import { taskEntityPath } from './paths.js';
 import { readBoardConfig, writeBoardConfig } from './board-yml.js';
 import { allocateId, buildDirName, sanitizeName } from './task-id.js';
 import { locateById, locateAll } from './locate.js';
 import { parseMainMd, serializeMainMd } from './main-md.js';
+import { parseTodoMd } from './todo-md.js';
 import { computeProgress } from './progress.js';
 import { syncSymlinks, removeSymlinksForTask } from './sync.js';
 
@@ -55,11 +56,17 @@ export function getTask(projectRoot: string, id: string): Task | null {
       mtime = statSync(mainPath).mtimeMs;
     } catch { mtime = undefined; }
   }
+  const todoPath = join(loc.path, 'todo.md');
+  let todos: TodoItem[] = [];
+  if (existsSync(todoPath)) {
+    try { todos = parseTodoMd(readFileSync(todoPath, 'utf8')); } catch { todos = []; }
+  }
   return {
     ...loc,
     main,
     progress: main ? computeProgress(main) : [0, 0],
     mtime,
+    todos,
   };
 }
 

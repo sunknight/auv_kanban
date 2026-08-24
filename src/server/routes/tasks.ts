@@ -5,6 +5,7 @@ import { createTask, getTask, updateTaskContent, deleteTask } from '../../core/t
 import { archiveTask } from '../../core/archive.js';
 import { moveTask } from '../../core/move.js';
 import { toggleSubtask } from '../../core/check.js';
+import { toggleTodo, appendTodo } from '../../core/todo.js';
 
 /** 文档扩展名白名单（小写，不含点） */
 const TEXT_EXTS = new Set(['txt', 'md', 'markdown']);
@@ -18,11 +19,12 @@ function isDocExt(ext: string): boolean {
 /**
  * 文档语义优先级：排在前面的优先展示。
  * - main.md 实际不进 docs（已结构化进 Task.main），列在此仅为"理论完整"。
- * - logs.md 紧随其后：执行进展日志，doing 栏任务首要关注。
+ * - todo.md 紧随其后：延后事项清单，未完成的遗留最该被看见。
+ * - logs.md：执行进展日志，doing 栏任务首要关注。
  * - 其后是设计/计划/说明/记录的常规四件套。
  * 未列出的文档按文件名字母序补在末尾。
  */
-export const DOC_ORDER = ['main.md', 'logs.md', 'design.md', 'plan.md', 'readme.md', 'notes.md'];
+export const DOC_ORDER = ['main.md', 'todo.md', 'logs.md', 'design.md', 'plan.md', 'readme.md', 'notes.md'];
 
 /** 任务文档排序：先按 DOC_ORDER 语义优先级，再按文件名字母序。纯函数，便于单测。 */
 export function sortDocs<T extends { name: string }>(docs: T[]): T[] {
@@ -67,6 +69,22 @@ export function registerTaskRoutes(fastify: FastifyInstance): void {
     const { project, index } = req.body as { project: string; index: number };
     await toggleSubtask(project, id, index);
     return { ok: true };
+  });
+
+  // 勾选/翻转 todo 延后事项（todo.md），与子任务 check 路由同构
+  fastify.post('/api/tasks/:id/todo-check', async (req) => {
+    const { id } = req.params as { id: string };
+    const { project, index } = req.body as { project: string; index: number };
+    await toggleTodo(project, id, index);
+    return { ok: true };
+  });
+
+  // 追加一条 todo 延后事项（只 append，不动已有行）
+  fastify.post('/api/tasks/:id/todo-add', async (req) => {
+    const { id } = req.params as { id: string };
+    const { project, title, content } = req.body as { project: string; title: string; content?: string };
+    const no = await appendTodo(project, id, title, content ?? '');
+    return { ok: true, no };
   });
 
   fastify.delete('/api/tasks/:id', async (req) => {

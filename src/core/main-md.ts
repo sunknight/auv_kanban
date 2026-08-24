@@ -1,7 +1,7 @@
 import type { ParsedMainMd, SubTask } from './types.js';
 
-/** checkbox 行：- [ ] / - [x] 后接正文 */
-const CHECKBOX_RE = /^(\s*-\s*\[)([ xX])(\]\s+)(.*)$/;
+/** checkbox 行：- [ ] / - [x] 后接正文。子任务与 todo.md 共用同一格式 */
+export const CHECKBOX_RE = /^(\s*-\s*\[)([ xX])(\]\s+)(.*)$/;
 /** 子任务正文的「编号」：2 位数字，如 01/02/03 */
 const NO_RE = /^(\d{2})\s+(.*)$/;
 /** 子任务正文的「标签」：[补充] 等，2-4 个中文字符或字母，方括号包裹 */
@@ -59,7 +59,7 @@ function collectSubtasks(lines: string[], range: { start: number; end: number })
       idx++;
       // 正文 m[4] 形如 "01 [补充] 文本" 或 "01 文本" 或 "文本"（无编号的兼容旧格式）
       const body = m[4];
-      const { no, tag, text } = parseSubtaskBody(body);
+      const { no, tag, text } = parseCheckboxBody(body);
       out.push({
         no,
         index: idx,
@@ -74,13 +74,13 @@ function collectSubtasks(lines: string[], range: { start: number; end: number })
 }
 
 /**
- * 解析子任务正文，分离编号 / 标签 / 文本。
+ * 解析 checkbox 行正文，分离编号 / 标签 / 文本。子任务与 todo.md 共用（格式一致）。
  * 支持格式：
  *   "01 文本"           → { no: '01', tag: '', text: '文本' }
  *   "01 [补充] 文本"    → { no: '01', tag: '补充', text: '文本' }
  *   "文本"（旧格式无编号）→ { no: '', tag: '', text: '文本' }，由上层兜底补编号
  */
-function parseSubtaskBody(body: string): { no: string; tag: string; text: string } {
+export function parseCheckboxBody(body: string): { no: string; tag: string; text: string } {
   let rest = body.trim();
   let no = '';
   let tag = '';

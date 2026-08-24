@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest';
 import { sortDocs, DOC_ORDER } from './tasks.js';
 
 describe('sortDocs', () => {
-  it('按语义优先级排序：main > logs > design > plan > readme > notes', () => {
+  it('按语义优先级排序：main > todo > logs > design > plan > readme > notes', () => {
     const docs = [
       { name: 'notes.md' },
       { name: 'design.md' },
@@ -10,9 +10,10 @@ describe('sortDocs', () => {
       { name: 'plan.md' },
       { name: 'readme.md' },
       { name: 'main.md' },
+      { name: 'todo.md' },
     ];
     const sorted = sortDocs(docs).map(d => d.name);
-    expect(sorted).toEqual(['main.md', 'logs.md', 'design.md', 'plan.md', 'readme.md', 'notes.md']);
+    expect(sorted).toEqual(['main.md', 'todo.md', 'logs.md', 'design.md', 'plan.md', 'readme.md', 'notes.md']);
   });
 
   it('未列入 DOC_ORDER 的文档按字母序补在末尾', () => {
@@ -42,7 +43,7 @@ describe('sortDocs', () => {
   });
 
   it('DOC_ORDER 符合约定顺序', () => {
-    expect(DOC_ORDER).toEqual(['main.md', 'logs.md', 'design.md', 'plan.md', 'readme.md', 'notes.md']);
+    expect(DOC_ORDER).toEqual(['main.md', 'todo.md', 'logs.md', 'design.md', 'plan.md', 'readme.md', 'notes.md']);
   });
 
   it('不修改原数组（返回新数组）', () => {

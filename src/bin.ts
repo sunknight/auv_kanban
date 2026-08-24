@@ -7,6 +7,8 @@ import { newCommand } from './cli/commands/new.js';
 import { moveCommand } from './cli/commands/move.js';
 import { checkCommand } from './cli/commands/check.js';
 import { uncheckCommand } from './cli/commands/uncheck.js';
+import { todoCheckCommand } from './cli/commands/todo-check.js';
+import { todoUncheckCommand } from './cli/commands/todo-uncheck.js';
 import { updateCommand } from './cli/commands/update.js';
 import { deleteCommand } from './cli/commands/delete.js';
 import { archiveCommand } from './cli/commands/archive.js';
@@ -28,6 +30,8 @@ try {
     .command(moveCommand)
     .command(checkCommand)
     .command(uncheckCommand)
+    .command(todoCheckCommand)
+    .command(todoUncheckCommand)
     .command(updateCommand)
     .command(deleteCommand)
     .command(archiveCommand)

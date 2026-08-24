@@ -55,6 +55,7 @@ kanban move 0001 ready
   tasks/                 任务实体统一目录（永不移动、永不改名）
     0001-任务名/
       main.md            主文件（H1=显示名 / 描述 / 提示词 / 子任务）
+      todo.md            延后事项（可选，格式同子任务；有未完成项时卡片显示 todo 标签）
       logs.md            执行进展日志（智能体执行时增量追加，Web 详情准实时可见）
       design.md          任务的设计文档（智能体执行时产物）
       ...
@@ -85,6 +86,8 @@ kanban move 0001 ready
 - [x] 子任务二
 ```
 
+> **todo.md（延后事项，可选）**：子任务 = 本任务必须完成；todo.md 记录**本次不做、留待后续处理**的事项（技术债、边界外需求、后续优化），格式与子任务一致（`- [ ] 01 文本`），事项标题下方可跟多行说明内容。有未完成 todo 时 Web 卡片显示 `todo N` 标签（已完成的任务同样显示，提醒遗留）；标记完成用 `kanban todo-check <ID> 01` 或在 Web 详情的 todo.md 预览里点选，点「＋添加」可输入标题与内容追加新事项（只 append；任务尚无 todo.md 时文档区显示「＋ todo.md」占位入口，提交才创建文件），全部勾完后标签消失。todo 不阻塞任务完成。
+
 ## CLI 命令
 
 | 命令 | 说明 |
@@ -98,6 +101,8 @@ kanban move 0001 ready
 | `kanban move <ID> <栏>` | 移动任务到指定栏（只改 board.yml，实体不动） |
 | `kanban check <ID> <编号>` | 勾选指定编号子任务（设为已完成，幂等；编号为 2 位数字，如 03） |
 | `kanban uncheck <ID> <编号>` | 取消勾选指定编号子任务（设为未完成，幂等） |
+| `kanban todo-check <ID> <编号>` | 勾选指定编号的 todo 延后事项（todo.md，幂等） |
+| `kanban todo-uncheck <ID> <编号>` | 取消勾选指定编号的 todo 延后事项（幂等） |
 | `kanban update [--no-run] <ID> <需求>` | 对任务追加补充需求（写入子任务，带 [补充] 标签）并重开到 doing；默认追加后立即执行，`--no-run` 只补需求不执行 |
 | `kanban progress <ID>` | 显示任务进度 |
 | `kanban sync` | 重建栏软链以对齐 board.yml（Linux/macOS）；Windows 下仅做 board.yml 自愈（孤儿归 backlog、清除幽灵 id） |

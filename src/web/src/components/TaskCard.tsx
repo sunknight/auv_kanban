@@ -14,6 +14,8 @@ export function TaskCardView(props: { task: Task; onOpenDetail?: (task: Task) =>
   const { task, onOpenDetail } = props;
   const [done, total] = task.progress;
   const pct = total === 0 ? 0 : (done / total) * 100;
+  // 未完成 todo 数：>0 时卡片显示 todo 标签（done 栏同样显示——遗留事项提醒是 todo 的核心语义）
+  const pendingTodos = task.todos?.filter(t => !t.done).length ?? 0;
   // 复制执行命令反馈态：复制成功后按钮文本临时变「✓ 已复制」，2 秒后恢复
   const [copied, setCopied] = useState(false);
 
@@ -71,8 +73,21 @@ export function TaskCardView(props: { task: Task; onOpenDetail?: (task: Task) =>
       </div>
 
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 4 }}>
-        <div style={{ fontSize: 11, color: 'var(--text-tertiary)' }}>
-          #{task.id}
+        <div style={{ fontSize: 11, color: 'var(--text-tertiary)', display: 'flex', alignItems: 'center', gap: 6 }}>
+          <span>#{task.id}</span>
+          {pendingTodos > 0 && (
+            <span
+              title={`有 ${pendingTodos} 项延后事项未处理（todo.md）`}
+              style={{
+                fontSize: 10, fontWeight: 600, color: '#b45309',
+                background: '#fef3c7', border: '1px solid #fde68a',
+                borderRadius: 'var(--radius-sm)', padding: '0 5px', lineHeight: '16px',
+                whiteSpace: 'nowrap',
+              }}
+            >
+              todo {pendingTodos}
+            </span>
+          )}
         </div>
         <button
           onPointerDown={e => e.stopPropagation()}

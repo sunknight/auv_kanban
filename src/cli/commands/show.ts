@@ -32,5 +32,14 @@ export const showCommand = {
     } else {
       console.log('\n(缺少 main.md)');
     }
+    if (t.todos.length > 0) {
+      const pending = t.todos.filter(x => !x.done).length;
+      console.log(`\n--- 延后事项 (todo.md) ---`);
+      for (const d of t.todos) {
+        const no = d.no ? `${d.no} ` : '';
+        console.log(`  [${d.done ? 'x' : ' '}] ${no}${d.text}`);
+      }
+      console.log(`  （todo 进度：${t.todos.length - pending}/${t.todos.length}，未完成 ${pending}）`);
+    }
   },
 };

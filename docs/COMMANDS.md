@@ -61,17 +61,19 @@ kanban skill 在 agent 内执行时，命令分两层：**斜杠命令**（用�
 
 ## 二、CLI 子命令（agent 实际调用的原语）
 
-斜杠命令背后，agent 在 bash 里调用的是这套 `kanban` CLI。**共 16 个子命令**，按用途分组：
+斜杠命令背后，agent 在 bash 里调用的是这套 `kanban` CLI。**共 18 个子命令**，按用途分组：
 
 ### 2.1 任务流转与查看（skill 执行流程中最常用）
 
 ```
-kanban show <ID>                 # 显示任务详情（绝对路径、栏、名称、描述、提示词、子任务带编号/标签）
-kanban list [--column <栏>]      # 列出任务；--column 可指定 backlog/ready/doing/done
+kanban show <ID>                 # 显示任务详情（绝对路径、栏、名称、描述、提示词、子任务带编号/标签；有 todo.md 时附延后事项段）
+kanban list [--column <栏>]      # 列出任务；--column 可指定 backlog/ready/doing/done；有未完成 todo 的任务行尾带 [todo:N]
 kanban new <名称>                # 在 backlog 创建新任务
 kanban move <ID> <栏>            # 移动任务到指定栏（只改 board.yml，实体不动）
 kanban check <ID> <编号>         # 勾选指定编号子任务（幂等，非 toggle）
 kanban uncheck <ID> <编号>       # 取消勾选指定编号子任务（幂等，非 toggle）
+kanban todo-check <ID> <编号>    # 勾选指定编号 todo 延后事项（todo.md，幂等）
+kanban todo-uncheck <ID> <编号>  # 取消勾选指定编号 todo 延后事项（幂等）
 kanban progress <ID>             # 显示某任务的子任务进度
 ```
 
@@ -105,13 +107,15 @@ kanban skill install             # 把 SKILL.md 安装到各 agent 的 skills �
 |------|------|
 | `<ID>` | 4 位任务编号，如 `0007`（永不复用） |
 | `<栏>` | `backlog`（待办）/ `ready`（允许执行）/ `doing`（进行中）/ `done`（完成） |
-| `<编号>` | 子任务的 2 位编号（01/02/03…），用于跨命令定位 |
+| `<编号>` | 子任务/todo 事项的 2 位编号（01/02/03…），用于跨命令定位 |
 | `<名称>` | 新任务标题，单行、避免 `/` 等目录非法字符 |
 | `<需求>` | 补充需求的文本，会以 `- [ ] NN [补充] 文本` 形式追加 |
 
 > `run` 和 `--design` **不是** CLI 子命令——`run` 是 skill 层执行流程，由 agent 解释执行一串上面的 CLI；`--design` 是 `run` 的 skill 层参数，不是 CLI flag。
 >
 > `delete` 与 `archive` 的区别：`delete` 彻底删除实体目录（ID 永不回收）；`archive` 把任务移到 `.kanban/archive/`，从看板隐藏但保留目录与文档，可回流（如 `update` 一个已存档任务时需先解除存档）。
+>
+> **todo.md（延后事项）**：任务子目录下可选的 `todo.md` 记录「本次不做、留待后续」的事项，格式与子任务一致（`- [ ] NN 文本`），标题下方可跟多行说明。有未完成 todo 时 Web 卡片显示 `todo N` 标签（done 栏同样显示），全部勾完后消失；`todo-check`/`todo-uncheck` 或在 Web 详情的 todo.md 预览里点选即可标记完成，预览的「＋添加」可追加新事项（只 append）。todo 不阻塞任务 move done。
 
 ---
 

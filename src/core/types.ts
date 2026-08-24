@@ -52,6 +52,20 @@ export interface ParsedMainMd {
   subtasks: SubTask[];
 }
 
+/** todo.md 里的一条延后事项（checkbox 行）。格式与子任务一致，语义不同：本次不做、留待后续处理 */
+export interface TodoItem {
+  /** 2 位编号（"01"/"02"…），用于跨命令定位（kanban todo-check <id> 03） */
+  no: string;
+  /** 位置序号（从 1 开始，按文件出现顺序）；无编号旧格式时作兜底定位 */
+  index: number;
+  /** 是否已完成 */
+  done: boolean;
+  /** 文本内容（去掉 "- [ ] " 与编号前缀后的正文） */
+  text: string;
+  /** 在 todo.md 中的行号（1-based，用于行级 patch） */
+  line: number;
+}
+
 /** 一个任务（运行时聚合） */
 export interface Task {
   /** 任务 ID（如 "0007"），目录名 ID 段 */
@@ -70,6 +84,8 @@ export interface Task {
   progress: [number, number];
   /** main.md 的磁盘修改时间（毫秒，stat.mtimeMs）。用于前端判断任务是否被外部改动（对比暂存时间）。缺失时为 undefined。 */
   mtime?: number;
+  /** todo.md 的延后事项列表（无 todo.md 时为空数组）。与子任务语义不同：本次不做、留待后续 */
+  todos: TodoItem[];
 }
 
 /** 全局 config.json 的一个项目条目 */

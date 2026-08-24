@@ -82,6 +82,22 @@ export async function toggleSubtask(project: string, id: string, index: number):
     body: JSON.stringify({ project, index }),
   });
 }
+/** 翻转 todo 延后事项（todo.md）的勾选状态 */
+export async function toggleTodo(project: string, id: string, index: number): Promise<void> {
+  await fetch(`${base}/api/tasks/${id}/todo-check`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ project, index }),
+  });
+}
+/** 追加一条 todo 延后事项（只 append），返回新事项编号 */
+export async function addTodo(project: string, id: string, title: string, content = ''): Promise<string> {
+  const r = await fetch(`${base}/api/tasks/${id}/todo-add`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ project, title, content }),
+  });
+  const j = await r.json();
+  return j.no as string;
+}
 export async function updateTask(
   project: string,
   id: string,
