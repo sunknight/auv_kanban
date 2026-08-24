@@ -1,6 +1,6 @@
 # Auv Kanban
 
-**A**gent **U**ser **V**elocity —— 基于 Markdown 文件 + 目录的**人 / 智能体共用看板**。完全无数据库，看板数据随项目 git 管理；人与智能体通过文件系统这块共享黑板协作。
+**A**gent **U**ser **V**antage —— 基于 Markdown 文件 + 目录的**人 / 智能体共用看板**。完全无数据库，看板数据随项目 git 管理；人与智能体通过文件系统这块共享黑板协作。
 
 > 📖 完整使用说明见 [docs/USAGE.md](docs/USAGE.md) ｜ 发布流程见 [docs/RELEASE.md](docs/RELEASE.md)
 
