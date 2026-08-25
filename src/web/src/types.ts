@@ -14,9 +14,12 @@ export interface ColumnWithTasks { name: string; display: string; tasks: Task[];
 export interface Board { columns: ColumnWithTasks[]; }
 export interface ProjectEntry { path: string; name: string; }
 
-/** 任务目录里的文档项 */
-export interface DocInfo { name: string; ext: string; isImage: boolean; }
-/** 文档内容：文本类返回 content，图片返回 dataUrl */
+/** 任务目录里的文档项：path 为相对任务根的路径（根级 path === name），同名文件靠 path 区分 */
+export interface DocInfo { name: string; path: string; ext: string; isImage: boolean; }
+/** 文档内容：文本类（text/markdown/csv/html）返回 content，图片返回 dataUrl，excel 返回各 sheet 行列 */
 export type DocContent =
-  | { type: 'text' | 'markdown'; content: string }
-  | { type: 'image'; dataUrl: string };
+  | { type: 'text' | 'markdown' | 'csv' | 'html'; content: string }
+  | { type: 'image'; dataUrl: string }
+  | { type: 'excel'; sheets: { name: string; rows: string[][] }[] };
+/** 文件树条目（全量，含不可预览项；与 files.md 清单同序） */
+export interface TreeEntry { path: string; name: string; isDir: boolean; previewable: boolean; }

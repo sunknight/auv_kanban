@@ -1,6 +1,6 @@
 {
   "name": "auv-kanban",
-  "version": "0.4.2",
+  "version": "0.5.0",
   "description": "Markdown + 目录驱动的人/智能体共用看板",
   "type": "module",
   "bin": {
@@ -13,6 +13,7 @@
     "prepublishOnly": "npm run build:all && npm test",
     "test": "vitest run",
     "test:watch": "vitest",
+    "dev": "concurrently --kill-others -n server,web -c blue,green npm:dev:server npm:dev:web",
     "dev:server": "PORT=${PORT:-38511} tsx watch src/bin.ts serve",
     "dev:web": "cd src/web && npm run dev",
     "dev:stop": "for P in 38411 38511; do lsof -tiTCP:$P -sTCP:LISTEN | xargs kill 2>/dev/null; done; sleep 1; for P in 38411 38511; do lsof -tiTCP:$P -sTCP:LISTEN | xargs kill -9 2>/dev/null; done; true",
@@ -49,13 +50,17 @@
     "chokidar": "^4.0.0",
     "fastify": "^5.0.0",
     "js-yaml": "^4.1.0",
+    "mammoth": "^1.12.1",
     "socket.io": "^4.7.0",
+    "xlsx": "^0.18.5",
     "yargs": "^17.7.0"
   },
   "devDependencies": {
     "@types/js-yaml": "^4.0.9",
     "@types/node": "^22.0.0",
     "@types/yargs": "^17.0.32",
+    "concurrently": "^10.0.5",
+    "jszip": "^3.10.1",
     "tsx": "^4.16.0",
     "typescript": "^5.5.0",
     "vitest": "^2.0.0"

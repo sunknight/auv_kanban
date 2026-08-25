@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest';
 import { mkdirSync, writeFileSync, mkdtempSync, rmSync, symlinkSync } from 'fs';
 import { join } from 'path';
 import { tmpdir } from 'os';
-import { DOC_ORDER, FILE_LISTING_NAME, buildFileListing, parseAnnotations, walkTaskDir } from './file-listing.js';
+import { DOC_ORDER, FILE_LISTING_NAME, buildFileListing, buildTreeNodes, parseAnnotations, walkTaskDir } from './file-listing.js';
 
 describe('DOC_ORDER', () => {
   it('files.md 排在固定文档末位', () => {
@@ -201,6 +201,40 @@ describe('buildFileListing', () => {
     ];
     const once = buildFileListing(entries, null);
     expect(buildFileListing(entries, once)).toBe(once);
+  });
+});
+
+describe('buildTreeNodes', () => {
+  it('返回与 files.md 同序的树：根级固定文档序在前、其余字母序；子级纯字母序；files.md 自动补入', () => {
+    const nodes = buildTreeNodes([
+      { name: 'zz.html' },
+      { name: 'main.md' },
+      { name: 'assets', path: 'assets', isDir: true },
+      { name: 'logo.png', path: 'assets/logo.png' },
+      { name: 'aa.json', path: 'assets/aa.json' },
+    ]);
+    expect(nodes.map(n => n.path)).toEqual(['main.md', 'files.md', 'assets', 'zz.html']);
+    const assets = nodes.find(n => n.path === 'assets');
+    expect(assets?.children?.map(c => c.path)).toEqual(['assets/aa.json', 'assets/logo.png']);
+    expect(assets?.isDir).toBe(true);
+  });
+
+  it('乱序输入（子条目先于父目录）自动补父节点；同路径去重', () => {
+    const nodes = buildTreeNodes([
+      { name: 'x.json', path: 'a/b/x.json' },
+      { name: 'a', path: 'a', isDir: true },
+      { name: 'x.json', path: 'a/b/x.json' },
+    ]);
+    const a = nodes.find(n => n.path === 'a');
+    expect(a?.children?.[0].path).toBe('a/b');
+    expect(a?.children?.[0].children).toHaveLength(1);
+  });
+
+  it('纯函数：不修改入参数组', () => {
+    const entries: { name: string; path?: string; isDir?: boolean }[] = [{ name: 'main.md' }];
+    const snapshot = [...entries];
+    buildTreeNodes(entries as never);
+    expect(entries).toEqual(snapshot);
   });
 });
 

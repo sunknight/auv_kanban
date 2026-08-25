@@ -95,7 +95,7 @@ export function parseAnnotations(content: string): Map<string, string> {
 }
 
 /** 树节点：由打平条目按 path 组装 */
-interface TreeNode {
+export interface TreeNode {
   name: string;
   path: string;
   isDir: boolean;
@@ -103,18 +103,11 @@ interface TreeNode {
 }
 
 /**
- * 生成 files.md 内容。纯函数、确定性（同输入同输出），幂等性靠调用方
- * 「新内容 === 现有内容则不写盘」保证。
- *
- * - 排序：根级固定文档序（DOC_ORDER，含清单自身——条目里没有时自动补入）在前、
- *   其余按文件名字母序；子目录内纯字母序。目录与文件混排。
- * - 隐藏文件（`.` 开头）不列；子目录递归展开（tree 缩进）。
- * - 固定文档行永不带说明；其他文件带回现有内容里已写的说明（按相对路径）。
+ * 由打平条目建树并排序：根级固定文档序（DOC_ORDER，含清单自身——条目里没有时自动补入）在前、
+ * 其余按文件名字母序；子目录内纯字母序，目录与文件混排。files.md 渲染与 Web 文件树共用本函数，
+ * 保证两侧顺序完全一致。纯函数（同输入同输出）。
  */
-export function buildFileListing(entries: ListingEntry[], existingContent: string | null): string {
-  const notes = existingContent == null ? new Map<string, string>() : parseAnnotations(existingContent);
-
-  // 按相对路径建树（同路径去重；父目录条目缺失时兜底补目录节点，容错乱序输入）
+export function buildTreeNodes(entries: ListingEntry[]): TreeNode[] {
   const roots: TreeNode[] = [];
   const findByPath = (nodes: TreeNode[], path: string): TreeNode | null => {
     for (const n of nodes) {
@@ -145,7 +138,6 @@ export function buildFileListing(entries: ListingEntry[], existingContent: strin
   }
   if (!seen.has(FILE_LISTING_NAME)) insert({ name: FILE_LISTING_NAME, path: FILE_LISTING_NAME, isDir: false });
 
-  // 排序：根级固定文档序在前 + 其余字母序；子级纯字母序
   const sortNodes = (nodes: TreeNode[], rootLevel: boolean) => {
     if (rootLevel) {
       const fixed = DOC_ORDER.map(p => nodes.find(n => n.path === p)).filter((n): n is TreeNode => n != null);
@@ -157,6 +149,20 @@ export function buildFileListing(entries: ListingEntry[], existingContent: strin
     for (const n of nodes) if (n.children) sortNodes(n.children, false);
   };
   sortNodes(roots, true);
+  return roots;
+}
+
+/**
+ * 生成 files.md 内容。纯函数、确定性（同输入同输出），幂等性靠调用方
+ * 「新内容 === 现有内容则不写盘」保证。
+ *
+ * - 排序：buildTreeNodes（与 Web 文件树共用）。
+ * - 隐藏文件（`.` 开头）不列；子目录递归展开（tree 缩进）。
+ * - 固定文档行永不带说明；其他文件带回现有内容里已写的说明（按相对路径）。
+ */
+export function buildFileListing(entries: ListingEntry[], existingContent: string | null): string {
+  const notes = existingContent == null ? new Map<string, string>() : parseAnnotations(existingContent);
+  const roots = buildTreeNodes(entries);
 
   // 渲染：祖先若为末子节点则用空格缩进，否则用 │ 续行
   const lines: string[] = [];

@@ -135,7 +135,8 @@ your-project/.kanban/
 - **仅监听本机**：服务绑定 `127.0.0.1`，不对外网/局域网开放，只能从本机浏览器访问。
 - **无认证/鉴权**：所有 `/api/*` 路由不带 token、密码或任何身份校验；任何能访问该端口的程序都能读写看板数据。
 - **项目白名单**：路由会对请求里的 `project` 字段做校验，必须是已注册项目（`~/.kanban/config.json` 列表）之一，否则返回 403——防止通过请求把任意目录当作看板根读写。
-- **任务文档已净化**：Web 详情里渲染的 Markdown 经 DOMPurify 净化，任务文档中的 `<script>` 等恶意 HTML 不会执行。
+- **任务文档已净化**：Web 详情里渲染的 Markdown 与 docx 转出的 HTML 均经 DOMPurify 净化，任务文档中的 `<script>` 等恶意 HTML 不会执行。
+- **文档预览范围与路径安全**：任务目录内（含子目录）的白名单文件可在线预览——txt/md/markdown/sql/json/xml/yaml/log/html(源码文本)、csv（表格）、图片 png/jpg/jpeg/gif/webp/svg/bmp/avif、docx（转 HTML）、xlsx/xls（转表格）；子目录文件经详情页「🗂 文件」浮层文件树点选。读取路径做三重校验（拒绝 `..` 段、realpath 解析不得逃出任务目录——软链外指一律 400、仅普通文件），杜绝路径穿越。超大文件（文本 >2MB / 图片 >10MB / docx·xlsx >20MB）返回 413 不预览。
 
 **请勿在以下场景直接暴露服务**：
 

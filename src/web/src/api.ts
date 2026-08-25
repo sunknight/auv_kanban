@@ -1,5 +1,5 @@
 import { io } from 'socket.io-client';
-import type { Board, ProjectEntry, Task, DocInfo, DocContent } from './types.js';
+import type { Board, ProjectEntry, Task, DocInfo, DocContent, TreeEntry } from './types.js';
 
 const base = '';
 
@@ -126,15 +126,21 @@ export function subscribeBoard(project: string, onChange: () => void): () => voi
   return () => { socket.disconnect(); };
 }
 
-/** 列出任务目录里的文档（txt/md/图片） */
-export async function listDocs(project: string, id: string): Promise<DocInfo[]> {
+/** 列出任务目录里的文档：docs 为顶层可预览项（chips），tree 为全量递归条目（文件树浮层） */
+export async function listDocs(project: string, id: string): Promise<{ docs: DocInfo[]; tree: TreeEntry[] }> {
   const r = await fetch(`${base}/api/tasks/${id}/docs?project=${encodeURIComponent(project)}`);
   const j = await r.json();
-  return j.docs ?? [];
+  return { docs: j.docs ?? [], tree: j.tree ?? [] };
 }
 
-/** 读取单个文档内容：文本类 {type,content}，图片 {type:'image',dataUrl} */
-export async function readDoc(project: string, id: string, name: string): Promise<DocContent> {
-  const r = await fetch(`${base}/api/tasks/${id}/docs/${encodeURIComponent(name)}?project=${encodeURIComponent(project)}`);
+/** 读取单个文档内容（path 为相对任务根的路径，可含子目录）：文本 {type,content}，图片 {type:'image',dataUrl}，
+ *  docx {type:'html'}，excel {type:'excel',sheets}，csv {type:'csv'}。
+ *  整条路径一次性 encodeURIComponent（/ 成 %2F 单段到达通配路由，也不给路由层任何 `..` 规范化空间）。 */
+export async function readDoc(project: string, id: string, path: string): Promise<DocContent> {
+  const r = await fetch(`${base}/api/tasks/${id}/docs/${encodeURIComponent(path)}?project=${encodeURIComponent(project)}`);
+  if (!r.ok) {
+    const j = await r.json().catch(() => null);
+    throw new Error(j?.error ?? '文档读取失败');
+  }
   return r.json();
 }

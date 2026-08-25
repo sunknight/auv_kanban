@@ -39,6 +39,7 @@ auv-kanban 的 Web 由两部分组成，开发时要分清：
 
 | 脚本 | 作用 | 跑的代码 |
 |---|---|---|
+| `npm run dev` | **一键开发**：concurrently 同时跑 dev:server + dev:web（--kill-others，一个挂全停，Ctrl+C 同时停） | 本地源码 |
 | `npm run dev:server` | 后端热重载（tsx watch），改后端代码自动重启 | 本地源码 |
 | `npm run dev:web` | 前端 vite dev（HMR），改前端代码即时生效 | 本地源码 |
 | `npm run build` | 编译后端（tsc → `dist/`） | — |
@@ -68,7 +69,16 @@ auv-kanban 的 Web 由两部分组成，开发时要分清：
 
 ### 开发调试（最常用）
 
-开**两个终端**：
+**一个终端一键启动**（推荐）：
+
+```bash
+npm run dev
+# 同时起后端 38511 + 前端 38411，日志带 [server]/[web] 前缀区分
+# Ctrl-C 一起停；任一进程挂掉另一个也会自动停（--kill-others）
+# 浏览器打开 http://localhost:38411
+```
+
+也可以开**两个终端**分开跑（需要单独重启某一端时用）：
 
 ```bash
 # 终端1：后端 serve（热重载，默认听 38511）
@@ -176,8 +186,7 @@ npm test              # 跑测试，确认无回归
 npm run build:web     # 或用 dev:web 热更新即时看效果
 
 # 3. 端到端验证（默认端口，不影响正式版 38311）
-npm run dev:server   # 终端1：后端 38511
-npm run dev:web      # 终端2：前端 38411，浏览器开 localhost:38411
+npm run dev          # 一键起后端 38511 + 前端 38411，浏览器开 localhost:38411
 ```
 
 ## 八、常见问题

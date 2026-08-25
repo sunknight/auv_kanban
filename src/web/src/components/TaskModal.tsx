@@ -1,11 +1,13 @@
 import { useState, useEffect, useLayoutEffect, useCallback, useRef, useMemo } from 'react';
 import { marked } from 'marked';
 import DOMPurify from 'dompurify';
-import type { Task, DocInfo, DocContent } from '../types.js';
+import type { Task, DocInfo, DocContent, TreeEntry } from '../types.js';
 import { updateTask, moveTask, listDocs, readDoc, archiveTask, deleteTask, subscribeBoard, getTask, addTodo, openTaskDir } from '../api.js';
 import { loadDraft, saveDraft, clearDraft } from '../drafts.js';
 import { copyText, buildRunCommand } from '../clipboard.js';
 import { TodoPreview } from './TodoPreview.js';
+import { FileTreePanel } from './FileTreePanel.js';
+import { CsvView, ExcelView } from './doc-views.js';
 
 interface EditableSubtask {
   no?: string;
@@ -66,11 +68,17 @@ export function TaskModal(props: {
 
   // 任务文档
   const [docs, setDocs] = useState<DocInfo[]>([]);
+  const [tree, setTree] = useState<TreeEntry[]>([]);
   const [docsLoading, setDocsLoading] = useState(true);
   const [activeDoc, setActiveDoc] = useState<DocInfo | null>(null);
   const [docContent, setDocContent] = useState<DocContent | null>(null);
   const [docLoading, setDocLoading] = useState(false);
   const [docError, setDocError] = useState('');
+
+  // 文件树浮层开关（存在 files.md 清单时经「🗂 文件」按钮展开；预览文件时浮层不关闭）
+  const [filesOpen, setFilesOpen] = useState(false);
+  const filesOpenRef = useRef(filesOpen);
+  filesOpenRef.current = filesOpen;
 
   // 复制执行命令反馈态
   const [copied, setCopied] = useState(false);
@@ -99,9 +107,13 @@ export function TaskModal(props: {
     ta.style.height = `${ta.scrollHeight}px`;
   }, [description]);
 
-  // ESC 关闭
+  // ESC 关闭：文件树浮层开着先关浮层，再关 modal
   useEffect(() => {
-    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose(); };
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== 'Escape') return;
+      if (filesOpenRef.current) setFilesOpen(false);
+      else onClose();
+    };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
   }, [onClose]);
@@ -132,12 +144,12 @@ export function TaskModal(props: {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // 打开 modal 时拉取文档列表
+  // 打开 modal 时拉取文档列表（chips + 全量文件树）
   useEffect(() => {
     let alive = true;
     setDocsLoading(true);
     listDocs(project, task.id)
-      .then(list => { if (alive) setDocs(list); })
+      .then(({ docs, tree }) => { if (alive) { setDocs(docs); setTree(tree); } })
       .catch(() => { if (alive) setDocError('文档列表加载失败'); })
       .finally(() => { if (alive) setDocsLoading(false); });
     return () => { alive = false; };
@@ -148,11 +160,25 @@ export function TaskModal(props: {
     setDocContent(null);
     setDocError('');
     setDocLoading(true);
-    readDoc(project, task.id, doc.name)
+    readDoc(project, task.id, doc.path)
       .then(c => { setDocContent(c); })
-      .catch(() => { setDocError('文档读取失败'); })
+      .catch(e => { setDocError(e instanceof Error && e.message ? e.message : '文档读取失败'); })
       .finally(() => setDocLoading(false));
   }, [project, task.id]);
+
+  // 文件树条目点开：可预览 → 按扩展构造 DocInfo 打开；不可预览 → 占位显示提示（浮层保持开着）
+  const openTreeEntry = useCallback((entry: TreeEntry) => {
+    if (!entry.previewable) {
+      setActiveDoc({ name: entry.name, path: entry.path, ext: '', isImage: false });
+      setDocContent(null);
+      setDocLoading(false);
+      setDocError('该格式暂不支持在线预览');
+      return;
+    }
+    const ext = entry.name.includes('.') ? entry.name.split('.').pop()!.toLowerCase() : '';
+    const imageExts = ['png', 'jpg', 'jpeg', 'gif', 'webp', 'svg', 'bmp', 'avif'];
+    openDoc({ name: entry.name, path: entry.path, ext, isImage: imageExts.includes(ext) });
+  }, [openDoc]);
 
   // 提交添加 todo：append（文件不存在则建）→ 刷新文档列表（占位标签消失）→
   // 打开 todo.md 预览显示新事项 → 刷新看板（卡片 todo 标签计数同步）
@@ -165,8 +191,8 @@ export function TaskModal(props: {
       setTodoFormOpen(false);
       setTodoTitle('');
       setTodoContent('');
-      listDocs(project, task.id).then(setDocs).catch(() => { /* 静默 */ });
-      openDoc({ name: 'todo.md', ext: 'md', isImage: false });
+      listDocs(project, task.id).then(({ docs, tree }) => { setDocs(docs); setTree(tree); }).catch(() => { /* 静默 */ });
+      openDoc({ name: 'todo.md', path: 'todo.md', ext: 'md', isImage: false });
       onSaved();
     } catch {
       setTodoFormError('添加失败，请重试');
@@ -182,7 +208,7 @@ export function TaskModal(props: {
     if (!doc) return;
     setDocLoading(true);
     setDocError('');
-    readDoc(project, task.id, doc.name)
+    readDoc(project, task.id, doc.path)
       .then(c => {
         setDocContent(c);
         if (opts?.scrollToBottom) {
@@ -193,8 +219,8 @@ export function TaskModal(props: {
           });
         }
       })
-      .catch(() => { setDocError('文档读取失败'); })
-      .finally(() => { setDocLoading(false); });
+      .catch(e => { setDocError(e instanceof Error && e.message ? e.message : '文档读取失败'); })
+      .finally(() => setDocLoading(false));
   }, [project, task.id]);
 
   // socket 自动刷新：看板任意文件变化时（如 agent 增量写 logs.md / 外部改任务），
@@ -211,9 +237,9 @@ export function TaskModal(props: {
   const selfWriteMtimeRef = useRef<number | null>(null);
   useEffect(() => {
     const unsub = subscribeBoard(project, () => {
-      // 重载文档列表（不重置 activeDoc，避免打断人正在看的文档）
+      // 重载文档列表与文件树（不重置 activeDoc，避免打断人正在看的文档）
       listDocs(project, task.id)
-        .then(list => { setDocs(list); })
+        .then(({ docs, tree }) => { setDocs(docs); setTree(tree); })
         .catch(() => { /* 静默：列表刷新失败不影响内容预览 */ });
       // 若正在看 logs.md（滚到底看最新进展）、todo.md（同步外部勾选）或 files.md（文件增减后清单已重生成），重载内容
       const curDoc = activeDocRef.current?.name;
@@ -326,16 +352,16 @@ export function TaskModal(props: {
 
   const renderDocButton = (d: DocInfo) => (
     <button
-      key={d.name}
+      key={d.path}
       onClick={() => openDoc(d)}
       style={{
-        border: activeDoc?.name === d.name ? '1px solid var(--accent)' : '1px solid var(--border)',
-        background: activeDoc?.name === d.name ? 'var(--accent-bg)' : '#fff',
-        color: activeDoc?.name === d.name ? 'var(--accent)' : 'var(--text-secondary)',
+        border: activeDoc?.path === d.path ? '1px solid var(--accent)' : '1px solid var(--border)',
+        background: activeDoc?.path === d.path ? 'var(--accent-bg)' : '#fff',
+        color: activeDoc?.path === d.path ? 'var(--accent)' : 'var(--text-secondary)',
         fontSize: 12, padding: '4px 10px', borderRadius: 'var(--radius-sm)',
         cursor: 'pointer',
       }}
-      title={d.name}
+      title={d.path}
     >
       {d.name}
     </button>
@@ -485,8 +511,9 @@ export function TaskModal(props: {
 
         {/* 左右双列区：左编辑 / 右文档。两列始终并排（不 wrap），
             各自 minHeight:0 + overflow 约束在 modal 高度内滚动。
-            flex-wrap 会让子项高度跟内容走而撑破 modal，故改用固定并排。 */}
-        <div style={{ display: 'flex', gap: 16, flex: 1, minHeight: 0 }}>
+            flex-wrap 会让子项高度跟内容走而撑破 modal，故改用固定并排。
+            position:relative 供文件树浮层（左列右半侧）定位。 */}
+        <div style={{ display: 'flex', gap: 16, flex: 1, minHeight: 0, position: 'relative' }}>
         {/* 左列：编辑区。minHeight:0 + overflow:auto 让内容超长时左列自身滚动。 */}
         <div style={{ flex: 5, minWidth: 280, minHeight: 0, overflow: 'auto', display: 'flex', flexDirection: 'column', gap: 16 }}>
 
@@ -634,10 +661,22 @@ export function TaskModal(props: {
           flex: 7.2, minWidth: 300, minHeight: 0, overflow: 'hidden',
           display: 'flex', flexDirection: 'column', gap: 8,
         }}>
-          {/* 标题行：左「任务文档」，右 files.md 目录清单标签（不占固定文档行） */}
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 2 }}>
+          {/* 标题行：「任务文档」标签右侧紧跟「🗂 文件」开关（存在目录清单时显示；点开浮层文件树，点选文件在预览区打开且浮层不关闭） */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 2 }}>
             <label style={{ ...labelStyle, marginBottom: 0 }}>任务文档</label>
-            {filesDoc && renderDocButton(filesDoc)}
+            {filesDoc && (
+              <button
+                onClick={() => setFilesOpen(v => !v)}
+                title="展开文件树：点选任意文件（含子目录内）在预览区打开，浮层不关闭可连续操作"
+                style={{
+                  border: filesOpen ? '1px solid var(--accent)' : '1px solid var(--border)',
+                  background: filesOpen ? 'var(--accent-bg)' : '#fff',
+                  color: filesOpen ? 'var(--accent)' : 'var(--text-secondary)',
+                  fontSize: 12, padding: '4px 10px', borderRadius: 'var(--radius-sm)',
+                  cursor: 'pointer',
+                }}
+              >🗂 文件</button>
+            )}
           </div>
           {docsLoading ? (
             <div style={{ fontSize: 12, color: 'var(--text-tertiary)', padding: '4px 0' }}>加载中…</div>
@@ -684,7 +723,7 @@ export function TaskModal(props: {
                   fontSize: 12, color: 'var(--text-secondary)',
                 }}>
                   <span style={{ fontWeight: 600 }}>
-                    {activeDoc.name === 'logs.md' ? '📋 执行进展' : activeDoc.name === 'todo.md' ? '🗒 延后事项' : activeDoc.name === 'files.md' ? '🗂 目录清单' : activeDoc.name}
+                    {activeDoc.name === 'logs.md' ? '📋 执行进展' : activeDoc.name === 'todo.md' ? '🗒 延后事项' : activeDoc.name === 'files.md' ? '🗂 目录清单' : activeDoc.path.includes('/') ? activeDoc.path : activeDoc.name}
                     {activeDoc.name === 'logs.md' && (
                       <span style={{ fontWeight: 400, color: 'var(--text-tertiary)', marginLeft: 6 }}>
                         （文件变化自动刷新）
@@ -736,6 +775,15 @@ export function TaskModal(props: {
                     <div style={{ fontSize: 12, color: '#b91c1c' }}>{docError}</div>
                   ) : docContent == null ? null : docContent.type === 'image' ? (
                     <img src={docContent.dataUrl} alt={activeDoc.name} style={{ maxWidth: '100%', borderRadius: 'var(--radius-sm)' }} />
+                  ) : docContent.type === 'html' ? (
+                    <div
+                      className="md-preview"
+                      dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize(docContent.content) }}
+                    />
+                  ) : docContent.type === 'csv' ? (
+                    <CsvView content={docContent.content} />
+                  ) : docContent.type === 'excel' ? (
+                    <ExcelView key={activeDoc.path} sheets={docContent.sheets} />
                   ) : docContent.type === 'markdown' && activeDoc.name === 'todo.md' ? (
                     <TodoPreview
                       content={docContent.content}
@@ -763,6 +811,15 @@ export function TaskModal(props: {
             )}
           </div>
         </div>
+        {/* 文件树浮层：盖在左列右半侧（不遮挡右侧预览区），点选文件连续预览 */}
+        {filesOpen && tree.length > 0 && (
+          <FileTreePanel
+            tree={tree}
+            activePath={activeDoc?.path ?? null}
+            onOpen={openTreeEntry}
+            onClose={() => setFilesOpen(false)}
+          />
+        )}
         </div>
         {/* 左右双列区结束 */}
 
