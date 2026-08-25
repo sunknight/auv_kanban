@@ -2,7 +2,7 @@ import { useState, useEffect, useLayoutEffect, useCallback, useRef, useMemo } fr
 import { marked } from 'marked';
 import DOMPurify from 'dompurify';
 import type { Task, DocInfo, DocContent } from '../types.js';
-import { updateTask, moveTask, listDocs, readDoc, archiveTask, deleteTask, subscribeBoard, getTask, addTodo } from '../api.js';
+import { updateTask, moveTask, listDocs, readDoc, archiveTask, deleteTask, subscribeBoard, getTask, addTodo, openTaskDir } from '../api.js';
 import { loadDraft, saveDraft, clearDraft } from '../drafts.js';
 import { copyText, buildRunCommand } from '../clipboard.js';
 import { TodoPreview } from './TodoPreview.js';
@@ -13,6 +13,9 @@ interface EditableSubtask {
   text: string;
   done: boolean;
 }
+
+/** 固定文档集合（与服务端 DOC_ORDER 保持一致，含 files.md 目录清单）：文档区固定行分组用 */
+const FIXED_DOC_SET = new Set(['main.md', 'todo.md', 'logs.md', 'design.md', 'plan.md', 'readme.md', 'notes.md', 'files.md']);
 
 export function TaskModal(props: {
   task: Task;
@@ -44,7 +47,8 @@ export function TaskModal(props: {
 
   // 已存盘基线快照：打开 modal 时 = 任务当前值；每次保存成功 / 外部改动同步后刷新为最新值。
   // 用于派生 dirty（当前编辑值 ≠ 基线 = 有未保存修改）。
-  const [baseline, setBaseline] = useState(() => ({
+  // 子任务用 EditableSubtask（no/tag 可选）：外部写入的子任务可能无编号/标签。
+  const [baseline, setBaseline] = useState<{ title: string; description: string; column: string; subtasks: EditableSubtask[] }>(() => ({
     title: task.name,
     description: task.main?.description ?? '',
     column: task.column,
@@ -211,11 +215,11 @@ export function TaskModal(props: {
       listDocs(project, task.id)
         .then(list => { setDocs(list); })
         .catch(() => { /* 静默：列表刷新失败不影响内容预览 */ });
-      // 若正在看 logs.md（滚到底看最新进展）或 todo.md（同步外部勾选），重载内容
+      // 若正在看 logs.md（滚到底看最新进展）、todo.md（同步外部勾选）或 files.md（文件增减后清单已重生成），重载内容
       const curDoc = activeDocRef.current?.name;
       if (curDoc === 'logs.md') {
         reloadActiveDoc({ scrollToBottom: true });
-      } else if (curDoc === 'todo.md') {
+      } else if (curDoc === 'todo.md' || curDoc === 'files.md') {
         reloadActiveDoc();
       }
       // 重载任务，处理外部改动
@@ -281,6 +285,13 @@ export function TaskModal(props: {
     }
   }, [task.id, task.name]);
 
+  // 打开任务目录：经后端唤起系统文件管理器（浏览器自身无法直接打开 Finder/资源管理器）。
+  // 失败才提示；成功时文件管理器窗口本身即反馈，按钮不变文案。
+  const handleOpenDir = useCallback(async () => {
+    const ok = await openTaskDir(project, task.id);
+    if (!ok) setError('打开目录失败（当前平台可能不支持）');
+  }, [project, task.id]);
+
   // 存档：从看板隐藏，实体移到 archive/（保留目录与文档）
   const handleArchive = async () => {
     if (!window.confirm(`确定存档任务 ${task.id}「${task.name}」？\n存档会从看板隐藏该任务（实体移到 archive/，目录与文档保留）。`)) return;
@@ -306,6 +317,29 @@ export function TaskModal(props: {
       setError('删除失败');
     }
   };
+
+  // 文档区分组：固定文档（main/todo/logs/design/plan/readme/notes）固定首行，
+  // files.md 目录清单单独放「任务文档」标题行最右侧；其他文档第二行起（后端 sortDocs 已按字母序）。
+  const fixedDocs = docs.filter(d => FIXED_DOC_SET.has(d.name) && d.name !== 'files.md');
+  const filesDoc = docs.find(d => d.name === 'files.md') ?? null;
+  const otherDocs = docs.filter(d => !FIXED_DOC_SET.has(d.name));
+
+  const renderDocButton = (d: DocInfo) => (
+    <button
+      key={d.name}
+      onClick={() => openDoc(d)}
+      style={{
+        border: activeDoc?.name === d.name ? '1px solid var(--accent)' : '1px solid var(--border)',
+        background: activeDoc?.name === d.name ? 'var(--accent-bg)' : '#fff',
+        color: activeDoc?.name === d.name ? 'var(--accent)' : 'var(--text-secondary)',
+        fontSize: 12, padding: '4px 10px', borderRadius: 'var(--radius-sm)',
+        cursor: 'pointer',
+      }}
+      title={d.name}
+    >
+      {d.name}
+    </button>
+  );
 
   const updateSubtask = (i: number, patch: Partial<EditableSubtask>) => {
     setSubtasks(prev => prev.map((s, idx) => idx === i ? { ...s, ...patch } : s));
@@ -377,7 +411,7 @@ export function TaskModal(props: {
           borderRadius: 'var(--radius-md)',
           boxShadow: '0 10px 40px rgba(0,0,0,0.15)',
           width: '100%',
-          maxWidth: 920,
+          maxWidth: 1120,
           maxHeight: 'calc(100vh - 80px)',
           padding: 24,
           display: 'flex',
@@ -401,6 +435,18 @@ export function TaskModal(props: {
               }}
             >
               {copied ? '✓ 已复制' : '复制执行命令'}
+            </button>
+            <button
+              onClick={handleOpenDir}
+              title="用系统文件管理器打开任务目录（macOS Finder / Windows 资源管理器）"
+              style={{
+                border: '1px solid var(--border)', background: '#fff',
+                color: 'var(--text-secondary)',
+                fontSize: 12, padding: '2px 8px', borderRadius: 'var(--radius-sm)',
+                cursor: 'pointer', lineHeight: 1.4,
+              }}
+            >
+              打开目录
             </button>
             <button
               onClick={handleArchive}
@@ -582,45 +628,44 @@ export function TaskModal(props: {
 
         {/* 右列：文档区（上方文档类别，下方预览）。
             overflow:hidden + minHeight:0 强制遵守 flex 分配的高度，
-            让内部预览区滚动而非被超长内容撑破 modal。 */}
+            让内部预览区滚动而非被超长内容撑破 modal。
+            modal 加宽的 ~200px 全部给本列（flex 5 → 7.2，左列基本不变）。 */}
         <div style={{
-          flex: 5, minWidth: 300, minHeight: 0, overflow: 'hidden',
+          flex: 7.2, minWidth: 300, minHeight: 0, overflow: 'hidden',
           display: 'flex', flexDirection: 'column', gap: 8,
         }}>
-          <label style={{ ...labelStyle, marginBottom: 2 }}>任务文档</label>
+          {/* 标题行：左「任务文档」，右 files.md 目录清单标签（不占固定文档行） */}
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 2 }}>
+            <label style={{ ...labelStyle, marginBottom: 0 }}>任务文档</label>
+            {filesDoc && renderDocButton(filesDoc)}
+          </div>
           {docsLoading ? (
             <div style={{ fontSize: 12, color: 'var(--text-tertiary)', padding: '4px 0' }}>加载中…</div>
           ) : (
-            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, alignItems: 'center' }}>
-              {docs.length === 0 && (
-                <span style={{ fontSize: 12, color: 'var(--text-tertiary)', padding: '4px 0' }}>（暂无文档）</span>
-              )}
-              {docs.map(d => (
-                <button
-                  key={d.name}
-                  onClick={() => openDoc(d)}
-                  style={{
-                    border: activeDoc?.name === d.name ? '1px solid var(--accent)' : '1px solid var(--border)',
-                    background: activeDoc?.name === d.name ? 'var(--accent-bg)' : '#fff',
-                    color: activeDoc?.name === d.name ? 'var(--accent)' : 'var(--text-secondary)',
-                    fontSize: 12, padding: '4px 10px', borderRadius: 'var(--radius-sm)',
-                    cursor: 'pointer',
-                  }}
-                  title={d.name}
-                >
-                  {d.isImage ? '🖼 ' : '📄 '}{d.name}
-                </button>
-              ))}
-              {!docs.some(d => d.name === 'todo.md') && (
-                <button
-                  onClick={() => { setTodoFormOpen(true); setTodoFormError(''); }}
-                  title="记录一条延后事项——提交后自动创建 todo.md（取消不会产生文件）"
-                  style={{
-                    border: '1px dashed var(--border)', background: 'transparent',
-                    color: 'var(--text-tertiary)', fontSize: 12, padding: '4px 10px',
-                    borderRadius: 'var(--radius-sm)', cursor: 'pointer',
-                  }}
-                >＋ todo.md</button>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+              {/* 首行：固定文档（main/todo/logs/design/plan/readme/notes + files.md 清单）＋ todo 占位 */}
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, alignItems: 'center' }}>
+                {docs.length === 0 && (
+                  <span style={{ fontSize: 12, color: 'var(--text-tertiary)', padding: '4px 0' }}>（暂无文档）</span>
+                )}
+                {fixedDocs.map(renderDocButton)}
+                {!docs.some(d => d.name === 'todo.md') && (
+                  <button
+                    onClick={() => { setTodoFormOpen(true); setTodoFormError(''); }}
+                    title="记录一条延后事项——提交后自动创建 todo.md（取消不会产生文件）"
+                    style={{
+                      border: '1px dashed var(--border)', background: 'transparent',
+                      color: 'var(--text-tertiary)', fontSize: 12, padding: '4px 10px',
+                      borderRadius: 'var(--radius-sm)', cursor: 'pointer',
+                    }}
+                  >＋ todo.md</button>
+                )}
+              </div>
+              {/* 第二行起：其他文档 */}
+              {otherDocs.length > 0 && (
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, alignItems: 'center' }}>
+                  {otherDocs.map(renderDocButton)}
+                </div>
               )}
             </div>
           )}
@@ -639,7 +684,7 @@ export function TaskModal(props: {
                   fontSize: 12, color: 'var(--text-secondary)',
                 }}>
                   <span style={{ fontWeight: 600 }}>
-                    {activeDoc.name === 'logs.md' ? '📋 执行进展' : activeDoc.name === 'todo.md' ? '🗒 延后事项' : activeDoc.name}
+                    {activeDoc.name === 'logs.md' ? '📋 执行进展' : activeDoc.name === 'todo.md' ? '🗒 延后事项' : activeDoc.name === 'files.md' ? '🗂 目录清单' : activeDoc.name}
                     {activeDoc.name === 'logs.md' && (
                       <span style={{ fontWeight: 400, color: 'var(--text-tertiary)', marginLeft: 6 }}>
                         （文件变化自动刷新）

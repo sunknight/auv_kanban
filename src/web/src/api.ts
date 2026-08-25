@@ -76,6 +76,14 @@ export async function deleteTask(project: string, id: string): Promise<void> {
     body: JSON.stringify({ project }),
   });
 }
+/** 用系统文件管理器打开任务实体目录（macOS Finder / Windows 资源管理器），返回是否成功 */
+export async function openTaskDir(project: string, id: string): Promise<boolean> {
+  const r = await fetch(`${base}/api/tasks/${id}/open-dir`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ project }),
+  });
+  return r.ok;
+}
 export async function toggleSubtask(project: string, id: string, index: number): Promise<void> {
   await fetch(`${base}/api/tasks/${id}/check`, {
     method: 'POST', headers: { 'Content-Type': 'application/json' },

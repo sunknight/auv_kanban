@@ -10,3 +10,5 @@ termstep-help.md
 termstep-tool.json
 .kanban/
 .codegraph/
+# TS 增量构建产物
+*.tsbuildinfo

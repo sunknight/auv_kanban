@@ -1,11 +1,16 @@
 import type { FastifyInstance } from 'fastify';
-import { readdirSync, readFileSync, existsSync, statSync } from 'fs';
+import { readFileSync, writeFileSync, existsSync, statSync } from 'fs';
 import { join, basename, extname } from 'path';
 import { createTask, getTask, updateTaskContent, deleteTask } from '../../core/task-crud.js';
 import { archiveTask } from '../../core/archive.js';
 import { moveTask } from '../../core/move.js';
 import { toggleSubtask } from '../../core/check.js';
 import { toggleTodo, appendTodo } from '../../core/todo.js';
+import { openDirInFileManager } from '../open-dir.js';
+import { DOC_ORDER, FILE_LISTING_NAME, buildFileListing, walkTaskDir } from '../../core/file-listing.js';
+
+// DOC_ORDER 迁至 core/file-listing.ts（与目录清单共用一份固定序）；此处转出保持既有导入不变
+export { DOC_ORDER } from '../../core/file-listing.js';
 
 /** 文档扩展名白名单（小写，不含点） */
 const TEXT_EXTS = new Set(['txt', 'md', 'markdown']);
@@ -15,16 +20,6 @@ function isDocExt(ext: string): boolean {
   const e = ext.toLowerCase();
   return TEXT_EXTS.has(e) || IMAGE_EXTS.has(e);
 }
-
-/**
- * 文档语义优先级：排在前面的优先展示。
- * - main.md 实际不进 docs（已结构化进 Task.main），列在此仅为"理论完整"。
- * - todo.md 紧随其后：延后事项清单，未完成的遗留最该被看见。
- * - logs.md：执行进展日志，doing 栏任务首要关注。
- * - 其后是设计/计划/说明/记录的常规四件套。
- * 未列出的文档按文件名字母序补在末尾。
- */
-export const DOC_ORDER = ['main.md', 'todo.md', 'logs.md', 'design.md', 'plan.md', 'readme.md', 'notes.md'];
 
 /** 任务文档排序：先按 DOC_ORDER 语义优先级，再按文件名字母序。纯函数，便于单测。 */
 export function sortDocs<T extends { name: string }>(docs: T[]): T[] {
@@ -101,6 +96,18 @@ export function registerTaskRoutes(fastify: FastifyInstance): void {
     return { ok: true };
   });
 
+  // 用系统文件管理器打开任务实体目录（macOS Finder / Windows 资源管理器 / Linux xdg-open）。
+  // 目录路径由服务端 getTask 定位得出，不收客户端路径参数；project 注册守卫由 preHandler 统一处理。
+  fastify.post('/api/tasks/:id/open-dir', async (req, reply) => {
+    const { id } = req.params as { id: string };
+    const { project } = req.body as { project: string };
+    const task = getTask(project, id);
+    if (!task) { reply.code(404); return { error: '任务不存在' }; }
+    const ok = await openDirInFileManager(task.path);
+    if (!ok) { reply.code(500); return { error: '打开目录失败（当前平台可能不支持）' }; }
+    return { ok: true, path: task.path };
+  });
+
   fastify.put('/api/tasks/:id', async (req) => {
     const { id } = req.params as { id: string };
     const body = req.body as {
@@ -124,27 +131,42 @@ export function registerTaskRoutes(fastify: FastifyInstance): void {
     return getTask(project, id);
   });
 
-  // 列出任务目录里的文档（白名单：txt/md/图片），仅一层、防路径穿越
+  // 列出任务目录里的文档（白名单：txt/md/图片），仅一层、防路径穿越。
+  // 目录含白名单外文件或子目录、或 files.md 已存在时，按需生成/更新目录清单 files.md：
+  // 内容无变化不写盘（幂等），避免触发 watcher 的刷新回环。
   fastify.get('/api/tasks/:id/docs', async (req, reply) => {
     const { id } = req.params as { id: string };
     const { project } = req.query as { project: string };
     const task = getTask(project, id);
     if (!task) { reply.code(404); return { error: '任务不存在' }; }
 
-    let entries: string[] = [];
-    try { entries = readdirSync(task.path); } catch { return { docs: [] }; }
-    const docs = entries
-      .filter(name => {
-        // 仅文件名本身（杜绝子目录 / ../ 之类）
-        if (name !== basename(name)) return false;
-        const full = join(task.path, name);
-        try { if (!statSync(full).isFile()) return false; } catch { return false; }
-        return isDocExt(extname(name).replace(/^\./, ''));
-      })
-      .map(name => {
-        const ext = extname(name).replace(/^\./, '');
-        return { name, ext, isImage: IMAGE_EXTS.has(ext.toLowerCase()) };
-      });
+    // 递归遍历任务目录（子目录内容进 files.md 清单；软链只列名不展开）。
+    // 清单触发与文档列表只看根级条目（Web 文档列表暂不支持子目录内文件）。
+    const all = walkTaskDir(task.path);
+    const root = all.filter(e => !(e.path ?? e.name).includes('/'));
+
+    const hasListing = root.some(e => e.name === FILE_LISTING_NAME && !e.isDir);
+    const needsListing = hasListing
+      || root.some(e => e.isDir || !isDocExt(extname(e.name).replace(/^\./, '')));
+    if (needsListing) {
+      let existing: string | null = null;
+      if (hasListing) {
+        try { existing = readFileSync(join(task.path, FILE_LISTING_NAME), 'utf8'); } catch { existing = null; }
+      }
+      const next = buildFileListing(all, existing);
+      if (next !== existing) {
+        try { writeFileSync(join(task.path, FILE_LISTING_NAME), next, 'utf8'); } catch { /* 清单写失败不阻塞文档列表 */ }
+      }
+    }
+
+    const docNames = root
+      .filter(e => !e.isDir && isDocExt(extname(e.name).replace(/^\./, '')))
+      .map(e => e.name);
+    if (needsListing && !hasListing) docNames.push(FILE_LISTING_NAME); // 刚生成的清单一并返回，免等 socket 回流
+    const docs = docNames.map(name => {
+      const ext = extname(name).replace(/^\./, '');
+      return { name, ext, isImage: IMAGE_EXTS.has(ext.toLowerCase()) };
+    });
     return { docs: sortDocs(docs) };
   });
 
