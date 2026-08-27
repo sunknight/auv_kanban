@@ -20,6 +20,7 @@ export function NewTaskForm(props: { project: string; onCreated?: () => void }) 
         placeholder="新任务名称"
         style={{
           flex: 1,
+          minWidth: 0, // 栏较窄时输入框可收缩，把空间让给「+」按钮完整显示
           padding: '6px 10px',
           borderRadius: 'var(--radius-sm)',
           border: '1px solid var(--border)',
@@ -33,6 +34,7 @@ export function NewTaskForm(props: { project: string; onCreated?: () => void }) 
       <button
         type="submit"
         style={{
+          flexShrink: 0, // 窄栏下按钮不参与收缩，保证完整可见
           padding: '6px 12px',
           borderRadius: 'var(--radius-sm)',
           border: 'none',
