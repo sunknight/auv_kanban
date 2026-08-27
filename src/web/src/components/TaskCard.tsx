@@ -50,6 +50,8 @@ export function TaskCardView(props: { task: Task; onOpenDetail?: (task: Task) =>
           fontWeight: 600,
           color: 'var(--text-primary)',
           lineHeight: 1.4,
+          minWidth: 0,            // 该 div 是 flex item，minWidth 0 + 长词可断行，标题才不会把「详情」按钮挤出卡片、也不会隐性撑宽所在栏
+          overflowWrap: 'anywhere',
         }}>
           {task.name}
         </div>

@@ -82,7 +82,9 @@ export function Board(props: {
         display: 'flex',
         gap: 16,
         padding: 16,
-        minWidth: 'min-content',  // 各栏已设 minWidth，让 flexbox 自适应收缩；仅当总宽跌破各栏下限之和时，外层 main 才出现滚动条
+        minWidth: 0,  // 关键：容器宽度只由可用空间决定，不随内容（如卡片里 nowrap 的长 prompt）膨胀。
+        // 各栏 flex-basis 0 + [240,360] 限幅 → 窗口变窄时等比收缩；仅当可用宽跌破 Σ(240)+间距
+        // 才溢出由外层 main 滚动。若改成 min-content，内容最小宽会冻结容器，栏宽完全不缩（曾经的 bug）。
         height: '100%',
       }}>
         {props.board.columns.map(col => (
