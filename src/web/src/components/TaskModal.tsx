@@ -8,6 +8,7 @@ import { copyText, buildRunCommand } from '../clipboard.js';
 import { TodoPreview } from './TodoPreview.js';
 import { FileTreePanel } from './FileTreePanel.js';
 import { CsvView, ExcelView } from './doc-views.js';
+import { useConfirm } from './ConfirmDialog.js';
 
 interface EditableSubtask {
   no?: string;
@@ -318,9 +319,17 @@ export function TaskModal(props: {
     if (!ok) setError('打开目录失败（当前平台可能不支持）');
   }, [project, task.id]);
 
+  // 二次确认弹窗（自绘）：window.confirm 在 iframe（TermStep 内嵌）里被浏览器拦截，删不了任务
+  const { confirm, confirmElement } = useConfirm();
+
   // 存档：从看板隐藏，实体移到 archive/（保留目录与文档）
   const handleArchive = async () => {
-    if (!window.confirm(`确定存档任务 ${task.id}「${task.name}」？\n存档会从看板隐藏该任务（实体移到 archive/，目录与文档保留）。`)) return;
+    const ok = await confirm({
+      title: '存档任务',
+      message: `确定存档任务 ${task.id}「${task.name}」？\n存档会从看板隐藏该任务（实体移到 archive/，目录与文档保留）。`,
+      confirmText: '存档',
+    });
+    if (!ok) return;
     try {
       await archiveTask(project, task.id);
       clearDraft(project, task.id); // 清草稿，避免孤儿指向已存档任务
@@ -333,7 +342,13 @@ export function TaskModal(props: {
 
   // 删除：永久移除任务及所有文档（危险操作，二次确认）
   const handleDelete = async () => {
-    if (!window.confirm(`确定删除任务 ${task.id}「${task.name}」？\n删除将永久移除任务及其所有文档，不可恢复。`)) return;
+    const ok = await confirm({
+      title: '删除任务',
+      message: `确定删除任务 ${task.id}「${task.name}」？\n删除将永久移除任务及其所有文档，不可恢复。`,
+      confirmText: '删除',
+      danger: true,
+    });
+    if (!ok) return;
     try {
       await deleteTask(project, task.id);
       clearDraft(project, task.id); // 清草稿，避免孤儿指向已删除任务
@@ -880,6 +895,9 @@ export function TaskModal(props: {
             </div>
           </div>
         )}
+
+        {/* 二次确认弹窗（存档/删除）：position fixed + zIndex 1200，盖在 modal 之上 */}
+        {confirmElement}
       </div>
     </div>
   );

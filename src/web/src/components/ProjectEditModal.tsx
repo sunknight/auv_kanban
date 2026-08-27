@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import type { ProjectEntry } from '../types.js';
 import { renameProject, deleteProject } from '../api.js';
+import { useConfirm } from './ConfirmDialog.js';
 
 /**
  * 项目编辑 Modal：改名 + 删除。
@@ -17,6 +18,9 @@ export function ProjectEditModal(props: {
   const [name, setName] = useState(project.name);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
+
+  // 二次确认弹窗（自绘）：window.confirm 在 iframe（TermStep 内嵌）里被浏览器拦截，删不了项目
+  const { confirm, confirmElement } = useConfirm();
 
   // ESC 关闭
   useEffect(() => {
@@ -43,7 +47,13 @@ export function ProjectEditModal(props: {
   };
 
   const handleDelete = async () => {
-    if (!window.confirm(`确定删除项目「${project.name}」？\n（仅从列表移除，不删除磁盘上的项目目录）`)) return;
+    const ok = await confirm({
+      title: '删除项目',
+      message: `确定删除项目「${project.name}」？\n（仅从列表移除，不删除磁盘上的项目目录）`,
+      confirmText: '删除',
+      danger: true,
+    });
+    if (!ok) return;
     setSaving(true);
     setError('');
     try {
@@ -156,6 +166,9 @@ export function ProjectEditModal(props: {
             >{saving ? '保存中...' : '保存'}</button>
           </div>
         </div>
+
+        {/* 二次确认弹窗（删除项目）：position fixed + zIndex 1200，盖在 modal 之上 */}
+        {confirmElement}
       </div>
     </div>
   );
