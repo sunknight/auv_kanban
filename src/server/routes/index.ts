@@ -4,6 +4,7 @@ import { listProjects } from '../../core/projects.js';
 import { registerProjectRoutes } from './projects.js';
 import { registerBoardRoutes } from './board.js';
 import { registerTaskRoutes } from './tasks.js';
+import { registerSearchRoutes } from './search.js';
 
 export async function registerRoutes(fastify: FastifyInstance, opts: { watchManager: any }): Promise<void> {
   // 安全守卫（修复 F2）：请求里的 `project` 字段被直接当作文件系统路径用，
@@ -25,4 +26,5 @@ export async function registerRoutes(fastify: FastifyInstance, opts: { watchMana
   registerProjectRoutes(fastify, opts.watchManager);
   registerBoardRoutes(fastify);
   registerTaskRoutes(fastify);
+  registerSearchRoutes(fastify);
 }

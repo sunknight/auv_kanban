@@ -1,5 +1,5 @@
-import { useState, useEffect, useCallback } from 'react';
-import { getProjects, getBoard, subscribeBoard, addProject, reorderProjects, setLastProject } from './api.js';
+import { useState, useEffect, useCallback, useRef } from 'react';
+import { getProjects, getBoard, subscribeBoard, addProject, reorderProjects, setLastProject, searchTasksApi } from './api.js';
 import type { Board as BoardT, ProjectEntry, Task } from './types.js';
 import { ProjectSidebar } from './components/ProjectSidebar.js';
 import { ProjectEditModal } from './components/ProjectEditModal.js';
@@ -17,6 +17,13 @@ export function App() {
   const [editingTask, setEditingTask] = useState<Task | null>(null);
   const [editingProject, setEditingProject] = useState<ProjectEntry | null>(null);
   const [showHelp, setShowHelp] = useState(false);
+  // 搜索（0002）：输入即时过滤（300ms 防抖）。matchedIds=null 表示未过滤；
+  // 关键词非空但请求失败也回退 null（不过滤，不阻塞浏览）。
+  const [searchOpen, setSearchOpen] = useState(false);
+  const [query, setQuery] = useState('');
+  const [matchedIds, setMatchedIds] = useState<Set<string> | null>(null);
+  const [searching, setSearching] = useState(false);
+  const searchInputRef = useRef<HTMLInputElement>(null);
 
   const loadProjects = useCallback(async () => {
     const { projects: list, lastProject } = await getProjects();
@@ -58,6 +65,41 @@ export function App() {
   useEffect(() => {
     if (current) setLastProject(current).catch(() => { /* 持久化失败不影响使用 */ });
   }, [current]);
+
+  // 搜索防抖：300ms 内连续输入只发最后一次；空关键词不发请求、立即恢复全量。
+  // cancelled 防过期响应：query 已变时，旧关键词的迟到结果不再落地（含 searching 标志）。
+  useEffect(() => {
+    const q = query.trim();
+    if (!current || !q) {
+      setMatchedIds(null);
+      setSearching(false);
+      return;
+    }
+    setSearching(true);
+    let cancelled = false;
+    const timer = setTimeout(async () => {
+      try {
+        const ids = await searchTasksApi(current, q);
+        if (!cancelled) setMatchedIds(new Set(ids));
+      } catch {
+        if (!cancelled) setMatchedIds(null);
+      } finally {
+        if (!cancelled) setSearching(false);
+      }
+    }, 300);
+    return () => { cancelled = true; clearTimeout(timer); };
+  }, [query, current]);
+
+  // 展开搜索框时自动聚焦；ESC 清空并收起（输入法组词中的 ESC 不算，留给输入法取消候选）
+  useEffect(() => {
+    if (searchOpen) searchInputRef.current?.focus();
+  }, [searchOpen]);
+
+  const handleSearchKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key !== 'Escape' || e.nativeEvent.isComposing) return;
+    setQuery('');
+    setSearchOpen(false);
+  };
 
   const handleSelect = (path: string) => {
     setCurrent(path);
@@ -127,25 +169,100 @@ export function App() {
         }}>
           Auv Kanban
         </div>
-        <button
-          onClick={() => setShowHelp(true)}
-          title="使用帮助"
-          style={{
-            border: '1px solid var(--border)',
-            background: '#fff',
-            color: 'var(--text-secondary)',
-            fontSize: 12,
-            padding: '3px 12px',
-            borderRadius: 'var(--radius-sm)',
-            cursor: 'pointer',
-            lineHeight: 1.6,
-            display: 'inline-flex',
-            alignItems: 'center',
-            gap: 4,
-          }}
-        >
-          ? 帮助
-        </button>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          {current && (searchOpen || query) && (
+            <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+              {/* 提示在输入框左侧：搜索组右端锚定 header 右缘，提示文字宽度变化只向左伸展，输入框位置不动 */}
+              <span style={{ fontSize: 11, color: 'var(--text-tertiary)', whiteSpace: 'nowrap' }}>
+                {searching ? '搜索中…'
+                  : query.trim() === '' ? ''
+                  : matchedIds && matchedIds.size > 0 ? `${matchedIds.size} 个匹配`
+                  : '无匹配'}
+              </span>
+              <div style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: 4,
+                border: '1px solid var(--accent)',
+                background: '#fff',
+                borderRadius: 'var(--radius-sm)',
+                padding: '2px 8px',
+              }}>
+                <span style={{ fontSize: 12, color: 'var(--text-tertiary)' }}>🔍</span>
+                <input
+                  ref={searchInputRef}
+                  value={query}
+                  onChange={e => setQuery(e.target.value)}
+                  onKeyDown={handleSearchKeyDown}
+                  placeholder="搜索任务…"
+                  style={{
+                    border: 'none',
+                    outline: 'none',
+                    fontSize: 12,
+                    width: 160,
+                    color: 'var(--text-primary)',
+                    background: 'transparent',
+                    lineHeight: 1.6,
+                  }}
+                />
+                {query && (
+                  <button
+                    onClick={() => { setQuery(''); setSearchOpen(false); }}
+                    title="清空并收起"
+                    style={{
+                      border: 'none', background: 'transparent', cursor: 'pointer',
+                      color: 'var(--text-tertiary)', fontSize: 12, padding: '0 2px', lineHeight: 1.6,
+                    }}
+                    onMouseEnter={e => e.currentTarget.style.color = 'var(--text-primary)'}
+                    onMouseLeave={e => e.currentTarget.style.color = 'var(--text-tertiary)'}
+                  >
+                    ✕
+                  </button>
+                )}
+              </div>
+            </div>
+          )}
+          {current && !searchOpen && !query && (
+            <button
+              onClick={() => setSearchOpen(true)}
+              title="搜索任务（名称/描述/子任务/文档正文）"
+              style={{
+                border: '1px solid var(--border)',
+                background: '#fff',
+                color: 'var(--text-secondary)',
+                fontSize: 12,
+                padding: '3px 12px',
+                borderRadius: 'var(--radius-sm)',
+                cursor: 'pointer',
+                lineHeight: 1.6,
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: 4,
+              }}
+            >
+              🔍 搜索
+            </button>
+          )}
+          <button
+            onClick={() => setShowHelp(true)}
+            title="使用帮助"
+            style={{
+              border: '1px solid var(--border)',
+              background: '#fff',
+              color: 'var(--text-secondary)',
+              fontSize: 12,
+              padding: '3px 12px',
+              borderRadius: 'var(--radius-sm)',
+              cursor: 'pointer',
+              lineHeight: 1.6,
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: 4,
+            }}
+          >
+            ? 帮助
+          </button>
+        </div>
       </header>
 
       {error && (
@@ -183,7 +300,8 @@ export function App() {
           flexDirection: 'column',
         }}>
           {board ? (
-            <Board board={board} project={current!} onOpenDetail={setEditingTask} onTaskCreated={refreshBoard} />
+            // searching 期间传 null（不过滤、全部显示），结果返回后才隐藏未匹配——避免「先空白再展示」的跳动
+            <Board board={board} project={current!} onOpenDetail={setEditingTask} onTaskCreated={refreshBoard} matchedIds={searching ? null : matchedIds} />
           ) : (
             <div style={{
               flex: 1,

@@ -45,6 +45,12 @@ export async function getBoard(project: string): Promise<Board> {
   const r = await fetch(`${base}/api/board?project=${encodeURIComponent(project)}`);
   return r.json();
 }
+/** 全项目任务搜索（0002）：返回正文含关键词的任务 id 数组（main.md 全文 + 文本类文档正文） */
+export async function searchTasksApi(project: string, q: string): Promise<string[]> {
+  const r = await fetch(`${base}/api/search?project=${encodeURIComponent(project)}&q=${encodeURIComponent(q)}`);
+  const j = await r.json();
+  return j.ids ?? [];
+}
 /** 拉取单个任务最新数据（含 mtime），用于 modal 内检测外部改动后同步。 */
 export async function getTask(project: string, id: string): Promise<Task | null> {
   const r = await fetch(`${base}/api/tasks/${id}?project=${encodeURIComponent(project)}`);

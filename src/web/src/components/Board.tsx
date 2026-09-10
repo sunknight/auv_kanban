@@ -18,13 +18,21 @@ export function Board(props: {
   project: string;
   onOpenDetail: (task: Task) => void;
   onTaskCreated?: () => void;
+  /** 搜索过滤（0002）：匹配任务 id 集合；null = 未过滤显示全部 */
+  matchedIds?: Set<string> | null;
 }) {
   const [activeId, setActiveId] = useState<string | null>(null);
   // PointerSensor 带 8px 活动阈值，避免点「详情」按钮也被判为拖拽
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 8 } }));
 
+  const filtering = props.matchedIds != null;
+  // 过滤态各栏只渲染匹配卡片；拖拽落点 index 按过滤后数组计算会打乱 order，故过滤时禁拖（sensors 置空）
+  const displayColumns = filtering
+    ? props.board.columns.map(c => ({ ...c, tasks: c.tasks.filter(t => props.matchedIds!.has(t.id)) }))
+    : props.board.columns;
+
   // 收集所有栏的任务,用于在 DragOverlay 里找到当前拖动的 task
-  const allTasks: Task[] = props.board.columns.flatMap(c => c.tasks);
+  const allTasks: Task[] = displayColumns.flatMap(c => c.tasks);
   const activeTask = activeId ? allTasks.find(t => t.id === activeId) ?? null : null;
 
   const onDragStart = (e: DragStartEvent) => {
@@ -77,7 +85,7 @@ export function Board(props: {
   };
 
   return (
-    <DndContext sensors={sensors} onDragStart={onDragStart} onDragEnd={onDragEnd}>
+    <DndContext sensors={filtering ? [] : sensors} onDragStart={onDragStart} onDragEnd={onDragEnd}>
       <div style={{
         display: 'flex',
         gap: 16,
@@ -87,8 +95,15 @@ export function Board(props: {
         // 才溢出由外层 main 滚动。若改成 min-content，内容最小宽会冻结容器，栏宽完全不缩（曾经的 bug）。
         height: '100%',
       }}>
-        {props.board.columns.map(col => (
-          <Column key={col.name} column={col} project={props.project} onOpenDetail={props.onOpenDetail} onTaskCreated={props.onTaskCreated} />
+        {props.board.columns.map((col, i) => (
+          <Column
+            key={col.name}
+            column={displayColumns[i]}
+            project={props.project}
+            onOpenDetail={props.onOpenDetail}
+            onTaskCreated={props.onTaskCreated}
+            totalCount={filtering ? col.tasks.length : undefined}
+          />
         ))}
       </div>
       {/* 拖拽 overlay:渲染在独立层,永远在最上层,不被栏遮挡。用纯展示组件避免 sortable 上下文告警 */}

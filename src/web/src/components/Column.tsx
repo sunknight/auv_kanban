@@ -9,6 +9,8 @@ export function Column(props: {
   project: string;
   onOpenDetail: (task: Task) => void;
   onTaskCreated?: () => void;
+  /** 搜索过滤时传入该栏全量任务数（0002），徽标显示 匹配数/总数；未过滤不传 */
+  totalCount?: number;
 }) {
   const { setNodeRef, isOver } = useDroppable({ id: props.column.name });
   // 栏内卡片用 id 数组驱动 SortableContext，决定栏内可排序的项
@@ -42,15 +44,18 @@ export function Column(props: {
         }}>
           {props.column.display}
         </div>
-        <div style={{
-          fontSize: 11,
-          fontWeight: 600,
-          color: 'var(--text-secondary)',
-          background: '#e5e7eb',
-          padding: '1px 7px',
-          borderRadius: 10,
-        }}>
-          {props.column.tasks.length}
+        <div
+          title={props.totalCount !== undefined ? `匹配 ${props.column.tasks.length} / 共 ${props.totalCount} 个任务` : undefined}
+          style={{
+            fontSize: 11,
+            fontWeight: 600,
+            color: 'var(--text-secondary)',
+            background: '#e5e7eb',
+            padding: '1px 7px',
+            borderRadius: 10,
+          }}
+        >
+          {props.totalCount !== undefined ? `${props.column.tasks.length}/${props.totalCount}` : props.column.tasks.length}
         </div>
       </div>
       <div style={{
