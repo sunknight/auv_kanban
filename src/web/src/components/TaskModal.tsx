@@ -224,33 +224,32 @@ export function TaskModal(props: {
       .finally(() => setDocLoading(false));
   }, [project, task.id]);
 
-  // socket 自动刷新：看板任意文件变化时（如 agent 增量写 logs.md / 外部改任务），
+  // 从磁盘同步当前任务（socket 自动刷新与顶部手动刷新按钮共用）：
   // ① 重载文档列表（捕捉新增/删除的文件，如 agent 刚创建 logs.md）；
   // ② 若当前正预览 logs.md，重载其内容并滚到底，看最新进展；
   // ③ 重载任务本身：若被外部改动（改md/拖拽/agent），用磁盘最新值同步编辑区，
   //    描述走"磁盘mtime vs 暂存savedAt"时间戳对比——磁盘更新则覆盖并清草稿，
   //    用户编辑更新（savedAt 更新）则保留；标题/栏/子任务始终用磁盘值刷新。
-  // 用 ref 持有 baseline，避免本 effect 依赖 baseline 导致频繁重订阅。
+  // 用 ref 持有 baseline，避免依赖 baseline 导致回调重建/频繁重订阅。
   const baselineRef = useRef(baseline);
   baselineRef.current = baseline;
   // 记录"自己保存产生的 mtime"：用户点保存后，socket 会推送这次写入引发的 board 变化，
   // 那不是外部改动。回调里若 diskMtime 与之一致则跳过同步提示。
   const selfWriteMtimeRef = useRef<number | null>(null);
-  useEffect(() => {
-    const unsub = subscribeBoard(project, () => {
-      // 重载文档列表与文件树（不重置 activeDoc，避免打断人正在看的文档）
-      listDocs(project, task.id)
-        .then(({ docs, tree }) => { setDocs(docs); setTree(tree); })
-        .catch(() => { /* 静默：列表刷新失败不影响内容预览 */ });
-      // 若正在看 logs.md（滚到底看最新进展）、todo.md（同步外部勾选）或 files.md（文件增减后清单已重生成），重载内容
-      const curDoc = activeDocRef.current?.name;
-      if (curDoc === 'logs.md') {
-        reloadActiveDoc({ scrollToBottom: true });
-      } else if (curDoc === 'todo.md' || curDoc === 'files.md') {
-        reloadActiveDoc();
-      }
-      // 重载任务，处理外部改动
-      getTask(project, task.id).then(latest => {
+  const refreshFromDisk = useCallback(() => {
+    // 重载文档列表与文件树（不重置 activeDoc，避免打断人正在看的文档）
+    listDocs(project, task.id)
+      .then(({ docs, tree }) => { setDocs(docs); setTree(tree); })
+      .catch(() => { /* 静默：列表刷新失败不影响内容预览 */ });
+    // 若正在看 logs.md（滚到底看最新进展）、todo.md（同步外部勾选）或 files.md（文件增减后清单已重生成），重载内容
+    const curDoc = activeDocRef.current?.name;
+    if (curDoc === 'logs.md') {
+      reloadActiveDoc({ scrollToBottom: true });
+    } else if (curDoc === 'todo.md' || curDoc === 'files.md') {
+      reloadActiveDoc();
+    }
+    // 重载任务，处理外部改动
+    getTask(project, task.id).then(latest => {
         if (!latest || !latest.main) return;
         const diskDesc = latest.main.description ?? '';
         const diskMtime = latest.mtime;
@@ -288,9 +287,13 @@ export function TaskModal(props: {
         setSyncedNotice(true);
         setTimeout(() => setSyncedNotice(false), 2000);
       }).catch(() => { /* 静默：任务重载失败不打断 */ });
-    });
-    return unsub;
   }, [project, task.id, reloadActiveDoc]);
+
+  // socket 自动刷新：看板任意文件变化时（如 agent 增量写 logs.md / 外部改任务）即从磁盘同步
+  useEffect(() => {
+    const unsub = subscribeBoard(project, refreshFromDisk);
+    return unsub;
+  }, [project, refreshFromDisk]);
 
   // doing 栏任务：打开详情时若有 logs.md，默认选中它（"正在执行"一眼可见）。
   // 仅在文档列表首次加载完成、且人还没手动选过文档时触发。
@@ -488,6 +491,18 @@ export function TaskModal(props: {
               }}
             >
               打开目录
+            </button>
+            <button
+              onClick={() => { refreshFromDisk(); onSaved(); }}
+              title="从磁盘重新加载当前任务与文档（含看板列表；实时同步异常时的手动兜底）"
+              style={{
+                border: '1px solid var(--border)', background: '#fff',
+                color: 'var(--text-secondary)',
+                fontSize: 12, padding: '2px 8px', borderRadius: 'var(--radius-sm)',
+                cursor: 'pointer', lineHeight: 1.4,
+              }}
+            >
+              刷新
             </button>
             <button
               onClick={handleArchive}

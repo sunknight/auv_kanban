@@ -121,7 +121,9 @@ export async function updateTask(
 
 export function subscribeBoard(project: string, onChange: () => void): () => void {
   const socket = io();
-  socket.emit('subscribe', project);
+  // 每次（重）连成功都重新 join room：断线重连后服务端 socket 是新实例，room 成员资格
+  // 已随旧连接销毁，不重发 subscribe 页面将永久收不到广播——ws 连接看似正常但不再更新（0001）。
+  socket.on('connect', () => socket.emit('subscribe', project));
   socket.on('board:changed', onChange);
   return () => { socket.disconnect(); };
 }
