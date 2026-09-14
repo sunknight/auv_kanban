@@ -4,6 +4,7 @@ import { useState } from 'react';
 import type { CSSProperties } from 'react';
 import type { Task } from '../types.js';
 import { copyText, buildRunCommand } from '../clipboard.js';
+import { typeColors, dueStatus, dueShortText, DUE_STATUS_COLORS, DUE_STATUS_TEXT } from '../taskMeta.js';
 
 /**
  * 纯展示卡片（不含 dnd hook）。
@@ -18,6 +19,15 @@ export function TaskCardView(props: { task: Task; onOpenDetail?: (task: Task) =>
   const pendingTodos = task.todos?.filter(t => !t.done).length ?? 0;
   // 复制执行命令反馈态：复制成功后按钮文本临时变「✓ 已复制」，2 秒后恢复
   const [copied, setCopied] = useState(false);
+
+  // 元数据 chips（类型/到期/相关人）：任一存在才渲染整行。done 栏到期不着色（已完成不再警示）
+  const tColor = typeColors(task.type);
+  const dStatus = dueStatus(task.due, task.column);
+  const dColor = DUE_STATUS_COLORS[dStatus ?? 'neutral'];
+  const people = task.people ?? [];
+  const shownPeople = people.slice(0, 3);
+  const extraPeople = people.length - shownPeople.length;
+  const hasMeta = !!(tColor || task.due || people.length > 0);
 
   // 点卡片（非按钮、非拖拽）打开详情。
   // dnd-kit 的 PointerSensor 带 8px 活动阈值：移动 <8px 不激活拖拽，pointerup 后正常派发 click；
@@ -111,6 +121,54 @@ export function TaskCardView(props: { task: Task; onOpenDetail?: (task: Task) =>
           {copied ? '✓ 已复制' : '复制'}
         </button>
       </div>
+
+      {hasMeta && (
+        // 左组（类型/相关人，可换行收缩）+ 右侧到期（不换行、右对齐固定位置）。
+        // 外层不 wrap：日期始终钉在行尾；左组内部 wrap 吸收窄栏换行。
+        <div style={{ display: 'flex', alignItems: 'center', gap: 4, marginTop: 8 }}>
+          {((task.type && tColor) || people.length > 0) && (
+            <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 4, minWidth: 0 }}>
+              {task.type && tColor && (
+                <span
+                  style={{
+                    fontSize: 10, fontWeight: 600, color: tColor.color, background: tColor.background,
+                    border: `1px solid ${tColor.border}`, borderRadius: 'var(--radius-sm)',
+                    padding: '0 5px', lineHeight: '16px', whiteSpace: 'nowrap', flexShrink: 0,
+                  }}
+                >
+                  {task.type}
+                </span>
+              )}
+              {people.length > 0 && (
+                <span
+                  title={`相关人：${people.join('、')}`}
+                  style={{
+                    fontSize: 10, fontWeight: 600, color: '#475569', background: '#f1f5f9',
+                    border: '1px solid #e2e8f0', borderRadius: 'var(--radius-sm)',
+                    padding: '0 5px', lineHeight: '16px', whiteSpace: 'nowrap', maxWidth: '100%',
+                    overflow: 'hidden', textOverflow: 'ellipsis',
+                  }}
+                >
+                  👤 {shownPeople.join(', ')}{extraPeople > 0 ? ` +${extraPeople}` : ''}
+                </span>
+              )}
+            </div>
+          )}
+          {task.due && (
+            <span
+              title={`${task.due}${dStatus ? ` · ${DUE_STATUS_TEXT[dStatus]}` : ''}`}
+              style={{
+                fontSize: 10, fontWeight: 600, color: dColor.color, background: dColor.background,
+                border: `1px solid ${dColor.border}`, borderRadius: 'var(--radius-sm)',
+                padding: '0 5px', lineHeight: '16px', whiteSpace: 'nowrap',
+                marginLeft: 'auto', flexShrink: 0,
+              }}
+            >
+              📅 {dueShortText(task.due)}
+            </span>
+          )}
+        </div>
+      )}
 
       <div style={{ marginTop: 8 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>

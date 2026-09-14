@@ -2,13 +2,14 @@ import { useState, useEffect, useLayoutEffect, useCallback, useRef, useMemo } fr
 import { marked } from 'marked';
 import DOMPurify from 'dompurify';
 import type { Task, DocInfo, DocContent, TreeEntry } from '../types.js';
-import { updateTask, moveTask, listDocs, readDoc, archiveTask, deleteTask, subscribeBoard, getTask, addTodo, openTaskDir } from '../api.js';
+import { updateTask, moveTask, listDocs, readDoc, archiveTask, deleteTask, subscribeBoard, getTask, addTodo, openTaskDir, getPeople } from '../api.js';
 import { loadDraft, saveDraft, clearDraft } from '../drafts.js';
 import { copyText, buildRunCommand } from '../clipboard.js';
 import { TodoPreview } from './TodoPreview.js';
 import { FileTreePanel } from './FileTreePanel.js';
 import { CsvView, ExcelView } from './doc-views.js';
 import { useConfirm } from './ConfirmDialog.js';
+import { TYPE_OPTIONS } from '../taskMeta.js';
 
 interface EditableSubtask {
   no?: string;
@@ -16,6 +17,19 @@ interface EditableSubtask {
   text: string;
   done: boolean;
 }
+
+/** 任务元数据的可编辑形态（type 用 '' 表示未设置，与人选下拉的空选项对应） */
+interface EditableMeta {
+  due: string;
+  people: string[];
+  type: string;
+}
+
+const metaOf = (task: Task): EditableMeta => ({
+  due: task.due ?? '',
+  people: task.people ?? [],
+  type: task.type ?? '',
+});
 
 /** 固定文档集合（与服务端 DOC_ORDER 保持一致，含 files.md 目录清单）：文档区固定行分组用 */
 const FIXED_DOC_SET = new Set(['main.md', 'todo.md', 'logs.md', 'design.md', 'plan.md', 'readme.md', 'notes.md', 'files.md']);
@@ -39,9 +53,20 @@ export function TaskModal(props: {
   const [subtasks, setSubtasks] = useState<EditableSubtask[]>(
     (task.main?.subtasks ?? []).map(s => ({ no: s.no, tag: s.tag, text: s.text, done: s.done })),
   );
+  // 任务元数据（到期/相关人/类型）：与标题/子任务一样不暂存草稿，始终用磁盘值初始化
+  const [meta, setMeta] = useState<EditableMeta>(() => metaOf(task));
   const [column, setColumn] = useState(task.column);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
+
+  // 相关人候选（全项目已录入聚合）与当前输入
+  const [peopleCandidates, setPeopleCandidates] = useState<string[]>([]);
+  const [personInput, setPersonInput] = useState('');
+  useEffect(() => {
+    let alive = true;
+    getPeople(project).then(list => { if (alive) setPeopleCandidates(list); }).catch(() => { /* 候选拉取失败不阻塞编辑 */ });
+    return () => { alive = false; };
+  }, [project]);
 
   // 未保存状态指示：modal 初始化时若加载到描述草稿，标记"已恢复未保存草稿"，
   // 用于显示更醒目的提示条（让用户明确意识到当前内容尚未真正存盘）。
@@ -51,17 +76,19 @@ export function TaskModal(props: {
   // 已存盘基线快照：打开 modal 时 = 任务当前值；每次保存成功 / 外部改动同步后刷新为最新值。
   // 用于派生 dirty（当前编辑值 ≠ 基线 = 有未保存修改）。
   // 子任务用 EditableSubtask（no/tag 可选）：外部写入的子任务可能无编号/标签。
-  const [baseline, setBaseline] = useState<{ title: string; description: string; column: string; subtasks: EditableSubtask[] }>(() => ({
+  const [baseline, setBaseline] = useState<{ title: string; description: string; column: string; subtasks: EditableSubtask[]; meta: EditableMeta }>(() => ({
     title: task.name,
     description: task.main?.description ?? '',
     column: task.column,
     subtasks: (task.main?.subtasks ?? []).map(s => ({ no: s.no, tag: s.tag, text: s.text, done: s.done })),
+    meta: metaOf(task),
   }));
   const dirty = useMemo(() => {
     const curSub = JSON.stringify(subtasks.map(s => ({ no: s.no, tag: s.tag, text: s.text, done: s.done })));
     const baseSub = JSON.stringify(baseline.subtasks.map(s => ({ no: s.no, tag: s.tag, text: s.text, done: s.done })));
-    return title !== baseline.title || description !== baseline.description || column !== baseline.column || curSub !== baseSub;
-  }, [title, description, column, subtasks, baseline]);
+    const metaDirty = JSON.stringify(meta) !== JSON.stringify(baseline.meta);
+    return title !== baseline.title || description !== baseline.description || column !== baseline.column || curSub !== baseSub || metaDirty;
+  }, [title, description, column, subtasks, baseline, meta]);
 
   // 外部改动同步提示：任务被外部（agent/拖拽/直接改md）更新并已用磁盘值同步后，
   // 短暂显示一条提示，约 2 秒后消失。
@@ -258,11 +285,13 @@ export function TaskModal(props: {
         const isSelfWrite = diskMtime != null && diskMtime === selfWriteMtimeRef.current;
         if (isSelfWrite) {
           selfWriteMtimeRef.current = null; // 消费一次后复位
+          setMeta(metaOf(latest));
           setBaseline({
             title: latest.name,
             description: diskDesc,
             column: latest.column,
             subtasks: (latest.main.subtasks ?? []).map(s => ({ no: s.no, tag: s.tag, text: s.text, done: s.done })),
+            meta: metaOf(latest),
           });
           return;
         }
@@ -272,10 +301,11 @@ export function TaskModal(props: {
         const diskWins = diskMtime != null && (draft == null || diskMtime > draft.savedAt);
         const useDesc = diskWins ? diskDesc : (draft?.description ?? baselineRef.current.description);
         if (diskWins && draft) clearDraft(project, task.id);
-        // 用磁盘值刷新标题/栏/子任务（它们不暂存）；描述按上述决策
+        // 用磁盘值刷新标题/栏/子任务/元数据（它们不暂存）；描述按上述决策
         setTitle(latest.name);
         setColumn(latest.column);
         setSubtasks((latest.main.subtasks ?? []).map(s => ({ no: s.no, tag: s.tag, text: s.text, done: s.done })));
+        setMeta(metaOf(latest));
         setDescription(useDesc);
         setRestoredFromDraft(false);
         setBaseline({
@@ -283,6 +313,7 @@ export function TaskModal(props: {
           description: diskDesc,
           column: latest.column,
           subtasks: (latest.main.subtasks ?? []).map(s => ({ no: s.no, tag: s.tag, text: s.text, done: s.done })),
+          meta: metaOf(latest),
         });
         setSyncedNotice(true);
         setTimeout(() => setSyncedNotice(false), 2000);
@@ -388,6 +419,17 @@ export function TaskModal(props: {
   const updateSubtask = (i: number, patch: Partial<EditableSubtask>) => {
     setSubtasks(prev => prev.map((s, idx) => idx === i ? { ...s, ...patch } : s));
   };
+
+  // 相关人：Enter 或「添加」按钮追加一个 chip；重名不重复添加
+  const addPerson = (raw: string) => {
+    const name = raw.trim();
+    if (!name) return;
+    setMeta(prev => prev.people.includes(name) ? prev : { ...prev, people: [...prev.people, name] });
+    setPersonInput('');
+  };
+  const removePerson = (name: string) => {
+    setMeta(prev => ({ ...prev, people: prev.people.filter(p => p !== name) }));
+  };
   const addSubtask = () => setSubtasks(prev => {
     // 新增子任务自动算下一编号（已有编号最大值 +1，与 CLI nextSubtaskNo 一致）
     const max = prev.reduce((m, s) => {
@@ -407,6 +449,7 @@ export function TaskModal(props: {
         description,
         prompt,
         subtasks: subtasks.map(s => ({ no: s.no, tag: s.tag, text: s.text, done: s.done })),
+        meta: { due: meta.due.trim(), people: meta.people, type: meta.type },
       };
       const saved = await updateTask(project, task.id, payload);
       if (column !== task.column) {
@@ -419,6 +462,7 @@ export function TaskModal(props: {
         description: payload.description,
         column,
         subtasks: payload.subtasks.map(s => ({ no: s.no, tag: s.tag, text: s.text, done: s.done })),
+        meta: { due: payload.meta.due, people: [...payload.meta.people], type: payload.meta.type },
       });
       setRestoredFromDraft(false);
       // 记录自己这次保存产生的 mtime：socket 会随后推送这次写入引发的 board 变化，
@@ -589,6 +633,98 @@ export function TaskModal(props: {
               fontFamily: 'inherit',
             }}
           />
+        </div>
+
+        {/* 到期日期 + 任务类型（并排一行） */}
+        <div style={{ display: 'flex', gap: 12 }}>
+          <div style={{ flex: 1 }}>
+            <label style={labelStyle}>到期日期</label>
+            <input
+              type="date"
+              value={meta.due}
+              onChange={e => setMeta(prev => ({ ...prev, due: e.target.value }))}
+              style={{ ...inputStyle, cursor: 'pointer' }}
+            />
+          </div>
+          <div style={{ flex: 1 }}>
+            <label style={labelStyle}>任务类型</label>
+            <select
+              value={meta.type}
+              onChange={e => setMeta(prev => ({ ...prev, type: e.target.value }))}
+              style={{ ...inputStyle, cursor: 'pointer' }}
+            >
+              <option value="">未设置</option>
+              {TYPE_OPTIONS.map(t => (
+                <option key={t} value={t}>{t}</option>
+              ))}
+            </select>
+          </div>
+        </div>
+
+        {/* 相关人（可多个）：输入 + 全项目候选下拉，生成可删除 chips */}
+        <div>
+          <label style={labelStyle}>相关人（需求提出者、交付对象等，可多个）</label>
+          {meta.people.length > 0 && (
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: 6 }}>
+              {meta.people.map(p => (
+                <span
+                  key={p}
+                  style={{
+                    display: 'inline-flex', alignItems: 'center', gap: 4,
+                    fontSize: 12, color: '#475569', background: '#f1f5f9',
+                    border: '1px solid #e2e8f0', borderRadius: 'var(--radius-sm)',
+                    padding: '2px 4px 2px 8px', lineHeight: '18px',
+                  }}
+                >
+                  {p}
+                  <button
+                    onClick={() => removePerson(p)}
+                    title={`移除 ${p}`}
+                    style={{
+                      border: 'none', background: 'transparent', color: 'var(--text-tertiary)',
+                      cursor: 'pointer', fontSize: 13, padding: '0 3px', lineHeight: 1,
+                    }}
+                    aria-label={`移除 ${p}`}
+                  >×</button>
+                </span>
+              ))}
+            </div>
+          )}
+          <div style={{ display: 'flex', gap: 6 }}>
+            <input
+              list="people-candidates"
+              value={personInput}
+              onChange={e => {
+                setPersonInput(e.target.value);
+                // 从 datalist 候选点选时，Chromium 以 insertReplacementText 派发一次性整体替换
+                // （逐字键入是 insertText），据此区分：点选候选即直接成 chip，免再点「添加」
+                if ((e.nativeEvent as InputEvent).inputType === 'insertReplacementText') {
+                  addPerson(e.target.value);
+                }
+              }}
+              onKeyDown={e => {
+                if (e.key === 'Enter') { e.preventDefault(); addPerson(personInput); }
+              }}
+              placeholder="输入名字，或从候选列表选择"
+              style={{ ...inputStyle, flex: 1, minWidth: 0 }}
+            />
+            <datalist id="people-candidates">
+              {[...new Set([...peopleCandidates, ...meta.people])].map(name => (
+                <option key={name} value={name} />
+              ))}
+            </datalist>
+            <button
+              onClick={() => addPerson(personInput)}
+              disabled={!personInput.trim()}
+              style={{
+                flexShrink: 0,
+                border: '1px solid var(--border)', background: '#fff',
+                color: personInput.trim() ? 'var(--accent)' : 'var(--text-tertiary)',
+                fontSize: 12, padding: '4px 12px',
+                borderRadius: 'var(--radius-sm)', cursor: personInput.trim() ? 'pointer' : 'default',
+              }}
+            >添加</button>
+          </div>
         </div>
 
         {/* 子任务 */}

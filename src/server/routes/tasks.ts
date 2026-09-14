@@ -1,7 +1,7 @@
 import type { FastifyInstance } from 'fastify';
 import { readFileSync, writeFileSync, statSync, realpathSync } from 'fs';
 import { join, extname, sep } from 'path';
-import { createTask, getTask, updateTaskContent, deleteTask } from '../../core/task-crud.js';
+import { createTask, getTask, updateTaskContent, updateTaskMeta, collectPeople, deleteTask } from '../../core/task-crud.js';
 import { archiveTask } from '../../core/archive.js';
 import { moveTask } from '../../core/move.js';
 import { toggleSubtask } from '../../core/check.js';
@@ -134,13 +134,24 @@ export function registerTaskRoutes(fastify: FastifyInstance): void {
       description: string;
       prompt: string;
       subtasks: { text: string; done: boolean }[];
+      meta?: { due?: string; people?: string[]; type?: string };
     };
+    // meta 提供时先落元数据（undefined 字段不动原值，旧客户端不带 meta 保持原语义）
+    if (body.meta) {
+      await updateTaskMeta(body.project, id, body.meta);
+    }
     return await updateTaskContent(body.project, id, {
       title: body.title,
       description: body.description,
       prompt: body.prompt,
       subtasks: body.subtasks,
     });
+  });
+
+  // 全项目已录入相关人聚合（Web 相关人候选列表用）
+  fastify.get('/api/people', async (req) => {
+    const { project } = req.query as { project: string };
+    return { people: collectPeople(project) };
   });
 
   fastify.get('/api/tasks/:id', async (req) => {

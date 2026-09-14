@@ -10,6 +10,12 @@ export interface ColumnDef {
 export interface TaskMeta {
   /** 创建时间（ISO 字符串） */
   created: string;
+  /** 到期日期（YYYY-MM-DD 字符串）。缺省 = 未设置 */
+  due?: string;
+  /** 相关人列表（需求提出者、交付对象等，纯字符串）。缺省/空 = 未设置 */
+  people?: string[];
+  /** 任务类型（事务/开发/缺陷/调研/设计/文档/提醒/其他）。缺省 = 未设置 */
+  type?: string;
 }
 
 /** 看板级配置（board.yml） */
@@ -86,6 +92,12 @@ export interface Task {
   mtime?: number;
   /** todo.md 的延后事项列表（无 todo.md 时为空数组）。与子任务语义不同：本次不做、留待后续 */
   todos: TodoItem[];
+  /** 到期日期（YYYY-MM-DD）。未设置为 undefined */
+  due?: string;
+  /** 相关人列表。未设置为 undefined */
+  people?: string[];
+  /** 任务类型。未设置为 undefined */
+  type?: string;
 }
 
 /** 全局 config.json 的一个项目条目 */

@@ -1,6 +1,6 @@
 import { mkdirSync, writeFileSync, existsSync, rmSync, readFileSync, statSync } from 'fs';
 import { join } from 'path';
-import type { Task, TodoItem } from './types.js';
+import type { Task, TaskMeta, TodoItem } from './types.js';
 import { taskEntityPath } from './paths.js';
 import { readBoardConfig, writeBoardConfig } from './board-yml.js';
 import { allocateId, buildDirName, sanitizeName } from './task-id.js';
@@ -45,6 +45,7 @@ export async function createTask(projectRoot: string, name: string, column = 'ba
 export function getTask(projectRoot: string, id: string): Task | null {
   const loc = locateById(projectRoot, id);
   if (!loc) return null;
+  const meta = readBoardConfig(projectRoot).tasks?.[id];
   const mainPath = join(loc.path, 'main.md');
   let main = null;
   let mtime: number | undefined;
@@ -67,7 +68,54 @@ export function getTask(projectRoot: string, id: string): Task | null {
     progress: main ? computeProgress(main) : [0, 0],
     mtime,
     todos,
+    ...(meta?.due ? { due: meta.due } : {}),
+    ...(meta?.people?.length ? { people: meta.people } : {}),
+    ...(meta?.type ? { type: meta.type } : {}),
   };
+}
+
+/**
+ * 更新任务元数据（到期/相关人/类型，board.yml tasks 映射）。
+ * 字段语义：undefined = 不动原值；'' / [] = 清除；有值 = 覆盖。
+ */
+export async function updateTaskMeta(
+  projectRoot: string,
+  id: string,
+  meta: { due?: string; people?: string[]; type?: string },
+): Promise<Task> {
+  const loc = locateById(projectRoot, id);
+  if (!loc) throw new Error(`任务 ${id} 不存在`);
+  const config = readBoardConfig(projectRoot);
+  const cur: TaskMeta = config.tasks?.[id] ?? { created: new Date().toISOString() };
+  const next: TaskMeta = { ...cur };
+  if (meta.due !== undefined) {
+    if (meta.due.trim() === '') delete next.due;
+    else next.due = meta.due.trim();
+  }
+  if (meta.people !== undefined) {
+    const people = [...new Set(meta.people.map(x => x.trim()).filter(x => x !== ''))];
+    if (people.length === 0) delete next.people;
+    else next.people = people;
+  }
+  if (meta.type !== undefined) {
+    if (meta.type.trim() === '') delete next.type;
+    else next.type = meta.type.trim();
+  }
+  config.tasks = { ...(config.tasks ?? {}), [id]: next };
+  writeBoardConfig(projectRoot, config);
+  return getTask(projectRoot, id)!;
+}
+
+/** 汇总全项目已录入的相关人（去重、按首次出现排序），作为 Web 录入候选列表 */
+export function collectPeople(projectRoot: string): string[] {
+  const config = readBoardConfig(projectRoot);
+  const out: string[] = [];
+  for (const meta of Object.values(config.tasks ?? {})) {
+    for (const p of meta.people ?? []) {
+      if (!out.includes(p)) out.push(p);
+    }
+  }
+  return out;
 }
 
 export function listTasks(projectRoot: string): Task[] {

@@ -115,14 +115,25 @@ export async function addTodo(project: string, id: string, title: string, conten
 export async function updateTask(
   project: string,
   id: string,
-  data: { title: string; description: string; prompt: string; subtasks: { no?: string; tag?: string; text: string; done: boolean }[] },
+  data: {
+    title: string; description: string; prompt: string;
+    subtasks: { no?: string; tag?: string; text: string; done: boolean }[];
+    /** 任务元数据（到期/相关人/类型）。缺省 = 不修改元数据 */
+    meta?: { due?: string; people?: string[]; type?: string };
+  },
 ): Promise<Task> {
   const r = await fetch(`${base}/api/tasks/${id}`, {
-    method: 'PUT',
-    headers: { 'Content-Type': 'application/json' },
+    method: 'PUT', headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ project, ...data }),
   });
   return r.json();
+}
+
+/** 全项目已录入相关人聚合（详情弹窗相关人候选列表用） */
+export async function getPeople(project: string): Promise<string[]> {
+  const r = await fetch(`${base}/api/people?project=${encodeURIComponent(project)}`);
+  const j = await r.json();
+  return j.people ?? [];
 }
 
 export function subscribeBoard(project: string, onChange: () => void): () => void {

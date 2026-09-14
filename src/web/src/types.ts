@@ -9,6 +9,12 @@ export interface Task {
   mtime?: number;
   /** todo.md 的延后事项（无该文件为空数组） */
   todos: TodoItem[];
+  /** 到期日期（YYYY-MM-DD）。未设置为 undefined */
+  due?: string;
+  /** 相关人列表。未设置为 undefined */
+  people?: string[];
+  /** 任务类型。未设置为 undefined */
+  type?: string;
 }
 export interface ColumnWithTasks { name: string; display: string; tasks: Task[]; }
 export interface Board { columns: ColumnWithTasks[]; }

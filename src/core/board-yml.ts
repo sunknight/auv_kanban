@@ -43,12 +43,28 @@ function normalizeBoardConfig(p: Partial<BoardConfig>): BoardConfig {
   for (const col of columns) {
     order[col.name] = Array.isArray(p.order?.[col.name]) ? p.order![col.name]!.map(String) : [];
   }
-  // tasks 容错：必须是对象，值的 created 为字符串；否则视为 {}
+  // tasks 容错：必须是对象，值的 created 为字符串；due/people/type 为可选元数据，
+  // 归一化时保留（任何 CLI 写操作都会经此读改写回，丢弃即静默抹掉元数据）。空值视为未设置、不产出键。
+  // 放宽为 unknown 记录入参：手写 board.yml 未加引号的日期会被 YAML 解析成 Date，需在此兼容。
   const tasks: Record<string, TaskMeta> = {};
-  if (p.tasks && typeof p.tasks === 'object') {
-    for (const [id, meta] of Object.entries(p.tasks)) {
-      if (meta && typeof meta === 'object' && typeof meta.created === 'string') {
-        tasks[id] = { created: meta.created };
+  const rawTasks = p.tasks as Record<string, Record<string, unknown>> | undefined;
+  if (rawTasks && typeof rawTasks === 'object') {
+    for (const [id, meta] of Object.entries(rawTasks)) {
+      // created 兼容手写未加引号被 YAML 解析成 Date 的情况
+      const created = typeof meta?.created === 'string'
+        ? meta.created
+        : meta?.created instanceof Date && !Number.isNaN(meta.created.getTime()) ? meta.created.toISOString() : null;
+      if (meta && typeof meta === 'object' && created) {
+        const next: TaskMeta = { created };
+        // due 兼容两种来源：字符串（本工具写盘）；手写未加引号时 YAML 1.1 解析成 Date
+        if (typeof meta.due === 'string' && meta.due.trim() !== '') next.due = meta.due.trim();
+        else if (meta.due instanceof Date && !Number.isNaN(meta.due.getTime())) next.due = formatDate(meta.due);
+        if (Array.isArray(meta.people)) {
+          const people = [...new Set(meta.people.filter((x): x is string => typeof x === 'string' && x.trim() !== '').map(x => x.trim()))];
+          if (people.length > 0) next.people = people;
+        }
+        if (typeof meta.type === 'string' && meta.type.trim() !== '') next.type = meta.type.trim();
+        tasks[id] = next;
       }
     }
   }
@@ -69,4 +85,12 @@ export function writeBoardConfig(projectRoot: string, config: BoardConfig): void
     tasks: config.tasks ?? {},
   });
   writeFileSync(boardYmlPath(projectRoot), raw, 'utf8');
+}
+
+/** Date → 本地时区 YYYY-MM-DD（手写 board.yml 的日期型 due 兜底归一化用） */
+function formatDate(d: Date): string {
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${y}-${m}-${day}`;
 }

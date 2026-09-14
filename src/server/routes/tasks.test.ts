@@ -460,3 +460,100 @@ describe('文档预览：子目录与多格式（0024）', () => {
     watchManager.stopAll();
   });
 });
+
+// ---- 任务元数据（due/people/type，board.yml tasks 映射）----
+// PUT /api/tasks/:id 带 meta 落盘；GET /api/tasks/:id 回读；GET /api/people 聚合候选。
+// HOME 隔离套路同 open-dir 测试（listProjects 读 ~/.kanban/config.json）。
+describe('任务元数据路由', () => {
+  let origHome: string | undefined;
+  let tmpHome: string;
+  let projectDir: string;
+
+  beforeEach(async () => {
+    origHome = process.env.HOME;
+    tmpHome = mkdtempSync(join(tmpdir(), 'kb-home-'));
+    process.env.HOME = tmpHome;
+    projectDir = mkdtempSync(join(tmpdir(), 'kb-proj-'));
+    addProject(projectDir);
+    await initBoard(projectDir);
+  });
+
+  afterEach(async () => {
+    if (origHome !== undefined) process.env.HOME = origHome;
+    rmSync(tmpHome, { recursive: true, force: true });
+    rmSync(projectDir, { recursive: true, force: true });
+  });
+
+  async function buildApp() {
+    const io = { to(_room: string) { return { emit(_e: string, _p?: unknown) { /* no-op */ } }; } };
+    const watchManager = new WatchManager(io as any);
+    const app = Fastify();
+    await registerRoutes(app, { watchManager });
+    return { app, watchManager };
+  }
+
+  async function newTask(app: import('fastify').FastifyInstance): Promise<string> {
+    const res = await app.inject({
+      method: 'POST', url: '/api/tasks',
+      payload: { project: projectDir, name: '测试任务' },
+    });
+    return res.json().id as string;
+  }
+
+  it('PUT 带 meta 落盘，GET 回读三项元数据', async () => {
+    const { app, watchManager } = await buildApp();
+    const id = await newTask(app);
+    const put = await app.inject({
+      method: 'PUT', url: `/api/tasks/${id}`,
+      payload: {
+        project: projectDir, title: '测试任务', description: '', prompt: '', subtasks: [],
+        meta: { due: '2026-09-20', people: ['张三', '李四'], type: '开发' },
+      },
+    });
+    expect(put.statusCode).toBe(200);
+    expect(put.json().due).toBe('2026-09-20');
+    expect(put.json().people).toEqual(['张三', '李四']);
+    expect(put.json().type).toBe('开发');
+
+    const get = await app.inject({ method: 'GET', url: `/api/tasks/${id}?project=${encodeURIComponent(projectDir)}` });
+    expect(get.json().due).toBe('2026-09-20');
+    expect(get.json().type).toBe('开发');
+    await app.close();
+    watchManager.stopAll();
+  });
+
+  it('PUT 不带 meta 不清空已有元数据（旧客户端兼容）', async () => {
+    const { app, watchManager } = await buildApp();
+    const id = await newTask(app);
+    await app.inject({
+      method: 'PUT', url: `/api/tasks/${id}`,
+      payload: { project: projectDir, title: 't', description: '', prompt: '', subtasks: [], meta: { due: '2026-09-20' } },
+    });
+    await app.inject({
+      method: 'PUT', url: `/api/tasks/${id}`,
+      payload: { project: projectDir, title: 't2', description: '', prompt: '', subtasks: [] },
+    });
+    const get = await app.inject({ method: 'GET', url: `/api/tasks/${id}?project=${encodeURIComponent(projectDir)}` });
+    expect(get.json().due).toBe('2026-09-20');
+    await app.close();
+    watchManager.stopAll();
+  });
+
+  it('GET /api/people 聚合全项目相关人（去重）', async () => {
+    const { app, watchManager } = await buildApp();
+    const id1 = await newTask(app);
+    const id2 = await newTask(app);
+    await app.inject({
+      method: 'PUT', url: `/api/tasks/${id1}`,
+      payload: { project: projectDir, title: 't', description: '', prompt: '', subtasks: [], meta: { people: ['张三', '李四'] } },
+    });
+    await app.inject({
+      method: 'PUT', url: `/api/tasks/${id2}`,
+      payload: { project: projectDir, title: 't', description: '', prompt: '', subtasks: [], meta: { people: ['王五', '张三'] } },
+    });
+    const res = await app.inject({ method: 'GET', url: `/api/people?project=${encodeURIComponent(projectDir)}` });
+    expect(res.json().people).toEqual(['张三', '李四', '王五']);
+    await app.close();
+    watchManager.stopAll();
+  });
+});
