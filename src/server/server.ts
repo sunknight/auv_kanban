@@ -7,6 +7,7 @@ import { fileURLToPath } from 'url';
 import { listProjects } from '../core/projects.js';
 import { registerRoutes } from './routes/index.js';
 import { WatchManager } from './watch-manager.js';
+import { readPackageVersion, buildStartupBanner } from './version.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
@@ -44,5 +45,5 @@ export async function startServer(opts: ServerOptions): Promise<void> {
   // 单个 handle 的 404 问题，又确保服务仅本机可达（修复 F5：避免同网段访问）。
   // 如需远程访问请自行加反向代理 + 鉴权，勿直接改为 0.0.0.0。
   await fastify.listen({ port: opts.port, host: '127.0.0.1' });
-  console.log(`看板服务已启动：http://localhost:${opts.port}（仅本机可达）`);
+  console.log(buildStartupBanner(opts.port, readPackageVersion()));
 }
