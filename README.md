@@ -73,7 +73,7 @@ kanban move 0001 ready
 
 > 实体集中在 `tasks/`，栏目录里的软链只是浏览用的视图。改进度用 `kanban move`（只改 board.yml + 迁软链，实体不动）；软链出错用 `kanban sync` 重建。
 >
-> **跨平台说明**：看板数据的真相源是 `tasks/` 实体 + `board.yml`，**不依赖软链**。栏软链只在 Linux/macOS 创建（作为目录浏览视图）；Windows 因普通用户无 symlink 权限会自动跳过软链，但所有 CLI 命令照常工作（详见下文「Windows 使用说明」）。集中模式依赖 `.kanban` 软链本身，Windows 上建议使用 `--local` 分散模式。
+> **跨平台说明**：看板数据的真相源是 `tasks/` 实体 + `board.yml`，**不依赖软链**。栏软链只在 Linux/macOS 创建（作为目录浏览视图）；Windows 因普通用户无 symlink 权限会自动跳过软链，但所有 CLI 命令照常工作（详见下文「Windows 使用说明」）。集中模式在 Windows 上用**目录联接（junction）**实现（创建无需特权），各平台行为一致。
 
 ## main.md 结构
 
@@ -232,7 +232,7 @@ main.md → logs.md → design.md → plan.md → readme.md → notes.md → 其
 
 ```bash
 npm install -g auv-kanban
-kanban init --local   # Windows 无 symlink 权限，用本地分散模式（集中模式的 .kanban 软链在 Windows 上不可用）
+kanban init
 kanban serve
 ```
 
@@ -242,6 +242,8 @@ kanban serve
 - 看板数据的真相源是 `.kanban/tasks/` 实体目录 + `board.yml`，**不依赖软链**。
 - macOS/Linux 会额外在 `backlog/ ready/ doing/ done/` 目录里建符号链接（指向 `tasks/`），方便用文件管理器浏览。
 - Windows 因普通用户创建 symlink 需要开发者模式或管理员权限，本工具会**自动跳过软链创建**。这不影响任何功能——CLI 和 Web UI 都直接读 `tasks/` + `board.yml`，栏目录保持为空目录。
+
+**集中模式在 Windows 上完全可用**：项目 `.kanban` 的链接用**目录联接（junction）**创建——junction 不需要开发者模式或管理员权限，行为与 symlink 一致（`kanban centralize` / `init` 默认集中 / `decentralize` 均正常）；仍想留在项目内的话用 `kanban init --local`。
 
 **安装 Skill（让智能体能用）**：Windows 下 `kanban skill install` 不会自动建软链，而是打印手动复制指引（包含源文件路径、目标路径和 PowerShell `Copy-Item` 命令）。按提示执行一次即可，详见 [docs/USAGE.md](docs/USAGE.md#三装-skill让智能体能用每台机器一次)。
 

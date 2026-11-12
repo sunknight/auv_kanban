@@ -6,7 +6,7 @@
 ### Added
 - 看板数据集中管理：`kanban centralize [项目] [--all]` 把项目 `.kanban` 整目录迁移到 `~/.kanban/boards/<编号-项目名>/`，项目原位置只留一条软链——全机看板数据一处总览、一处备份；幂等可重跑，断链软链可自动修复，迁移时自动给项目 `.gitignore` 补软链忽略规则（带斜杠的 `.kanban/` 规则匹配不到软链文件）。
 - `kanban decentralize [项目] [--all]`：逆向迁移，把中心看板迁回项目内真实目录、摘除软链（幂等）。
-- `kanban init` 默认集中建板（数据直接落在 `~/.kanban/boards/`，项目 `.kanban` 为软链），`--local` 保留项目内分散形态；Windows 无 symlink 权限时自动降级本地模式。
+- `kanban init` 默认集中建板（数据直接落在 `~/.kanban/boards/`，项目 `.kanban` 为软链），`--local` 保留项目内分散形态；Windows 上链接改用目录联接（junction）创建，无需开发者模式/管理员权限，集中模式各平台行为一致。
 
 ### Changed
 - 全局 `config.json` 的项目条目新增 `no` 编号字段（3 位，创建时分配冻结）与 `nextProjectNo` 分配游标；中心目录名 = 编号-项目名，项目改名不跟随改目录。

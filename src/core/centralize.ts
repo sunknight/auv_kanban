@@ -42,12 +42,18 @@ export interface CentralizeResult {
  * - .kanban 是断链软链 → 中心目录存在则重建软链（relinked），否则抛错
  * - .kanban 是真实目录但中心目录已存在 → 抛错（上次中断残留，人工确认后删中心再重跑）
  */
+/**
+ * 创建 .kanban → 中心目录的链接。
+ * Windows 用 junction（目录联接）：创建**无需**开发者模式/管理员权限，且恰好匹配
+ * 本场景的两个前提——目标必须是目录、必须是绝对路径（boardDir 均满足）；
+ * 类 UNIX 用普通 symlink。lstat 在 Windows 上把 junction 报告为 isSymbolicLink()，
+ * 故状态机其余分支（already/断链/decentralize 的 unlink 摘除）对两种形态统一成立。
+ */
+function linkToBoard(boardDir: string, local: string): void {
+  symlinkSync(boardDir, local, isWindows ? 'junction' : 'dir');
+}
+
 export function centralizeProject(projectRoot: string): CentralizeResult {
-  // Windows 普通用户无 symlink 权限，集中模式（.kanban 软链）不可用——直接抛错，
-  // 由调用方降级（init 自动转 --local）或提示（CLI 直接报给用户）。
-  if (isWindows) {
-    throw new Error('Windows 不支持集中模式（.kanban 软链需开发者模式/管理员权限），请使用本地分散模式（kanban init --local）');
-  }
   const abs = resolve(projectRoot);
   const local = kanbanDir(abs);
   const boardDir = centralBoardDir(abs); // 内含 ensureProjectNo：会分配编号并写回 config
@@ -78,7 +84,7 @@ export function centralizeProject(projectRoot: string): CentralizeResult {
       throw new Error(`${local} 是断链软链且中心目录 ${boardDir} 不存在，无数据可接续，请人工处理`);
     }
     unlinkSync(local);
-    symlinkSync(boardDir, local);
+    linkToBoard(boardDir, local);
     return { project: abs, status: 'relinked', boardDir, gitignore: fixGitignoreForSymlink(abs) };
   }
 
@@ -96,7 +102,7 @@ export function centralizeProject(projectRoot: string): CentralizeResult {
     cpSync(local, boardDir, { recursive: true, verbatimSymlinks: true });
     rmSync(local, { recursive: true, force: true });
   }
-  symlinkSync(boardDir, local);
+  linkToBoard(boardDir, local);
   return { project: abs, status: 'migrated', boardDir, gitignore: fixGitignoreForSymlink(abs) };
 }
 

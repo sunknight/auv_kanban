@@ -12,3 +12,6 @@ termstep-tool.json
 .codegraph/
 # TS 增量构建产物
 *.tsbuildinfo
+
+# kanban: `.kanban/` 带斜杠规则匹配不到软链文件（git 视软链为文件）
+.kanban
