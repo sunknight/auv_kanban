@@ -40,10 +40,10 @@
   "homepage": "https://www.npmjs.com/package/auv-kanban",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/sunknight/auv-kanban.git"
+    "url": "git+https://github.com/sunknight/auv_kanban.git"
   },
   "bugs": {
-    "url": "https://github.com/sunknight/auv-kanban/issues"
+    "url": "https://github.com/sunknight/auv_kanban/issues"
   },
   "dependencies": {
     "@fastify/static": "^10.1.2",

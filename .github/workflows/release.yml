@@ -1,0 +1,33 @@
+name: Release to npm
+# Trusted Publishing（OIDC）：推 v* tag 自动构建→测试→发布，无需 npm token / OTP。
+# 依赖两处一次性配置（见 docs/RELEASE.md）：
+#   1) npmjs.com 包 Settings → Trusted publishing：owner=sunknight repo=auv_kanban
+#      workflow=release.yml environment=release（保存后 2 天内须完成首次发布）
+#   2) GitHub 仓库 Settings → Environments → 建 release 环境
+on:
+  push:
+    tags: ['v*']
+
+permissions:
+  id-token: write # OIDC 换取 npm 短期令牌所必需
+  contents: read
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    environment: release
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          registry-url: https://registry.npmjs.org
+          package-manager-cache: false
+      # node 22 自带 npm 10，Trusted Publishing 需 npm >= 11.5.1
+      - run: npm install -g npm@11
+      # 前端有独立 lockfile，prepublishOnly 的 build:web 需要其依赖
+      - run: npm ci
+      - run: npm ci
+        working-directory: src/web
+      # prepublishOnly 钩子自动跑 build:all + 全量测试，全过才上传
+      - run: npm publish
