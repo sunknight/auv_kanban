@@ -1,6 +1,6 @@
 # Auv Kanban
 
-**A**gent **U**ser **V**antage —— 基于 Markdown 文件 + 目录的**人 / 智能体共用看板**。完全无数据库，看板数据随项目 git 管理；人与智能体通过文件系统这块共享黑板协作。
+**A**gent **U**ser **V**antage —— 基于 Markdown 文件 + 目录的**人 / 智能体共用看板**。完全无数据库，看板数据集中收纳在 `~/.kanban/boards/`（项目里 `.kanban` 为软链入口）；人与智能体通过文件系统这块共享黑板协作。
 
 > 📖 完整使用说明见 [docs/USAGE.md](docs/USAGE.md) ｜ 发布流程见 [docs/RELEASE.md](docs/RELEASE.md)
 
@@ -9,7 +9,7 @@
 ## 特性
 
 - **Markdown + 目录驱动**：任务实体是 `.kanban/tasks/` 下的子目录（含 main.md + 素材），栏归属（状态）记录在 `board.yml`。
-- **随项目版本管理**：看板数据在项目 `.kanban/` 下，纳入 git。
+- **集中收纳**：看板数据统一放在 `~/.kanban/boards/<编号-项目名>/`，项目 `.kanban` 只是一条软链——全机看板一眼总览、备份只管一处；`init --local` / `decentralize` 可退回项目内分散形态。
 - **三方共用**：人（Web UI / CLI）、Web 服务（可视化层）、智能体（Skill + CLI）共用文件系统。
 - **CLI 由 Skill 驱动**：`kanban` CLI 是智能体的执行原语——Skill 解释 `/kanban` 斜杠命令时自动调用它们；日常人只需 Web UI 和斜杠命令，一般无需手工执行 CLI（需要时也随时可用）。
 - **稳定路径**：任务实体目录创建后冻结——永不移动、永不改名（改标题只重写 H1），写入永远按 ID 定位到 `tasks/<ID>-<名>/`。栏目录是只读软链视图，改进度只改 board.yml。
@@ -31,7 +31,7 @@ kanban init
 
 # 2. 装 Skill（一次性，所有项目生效；默认探测本机已装的 agent 全装）
 kanban skill install
-#    可选：想让智能体在新会话主动询问是否挂看板？见下方「新会话自动询问挂看板」——需手动往 AGENTS.md 加一段规则
+#    可选：想让智能体在新会话自动挂看板（不询问）？见下方「新会话自动挂看板」——需手动往 AGENTS.md 加一段规则
 
 # 3. 起 Web 服务（默认端口 38311）
 kanban serve
@@ -50,8 +50,12 @@ kanban move 0001 ready
 
 ## 目录结构
 
+`kanban init` 默认把看板数据**集中**到 `~/.kanban/boards/<编号-项目名>/`，项目里只留一条软链（`--local` 可留在项目内；存量项目用 `kanban centralize [--all]` 迁移、`kanban decentralize [--all]` 迁回，均幂等）。两种形态对所有命令透明：
+
 ```
-<项目>/.kanban/
+<项目>/.kanban -> ~/.kanban/boards/002-项目名/    # 默认：软链指向中心（init --local / decentralize 后为真实目录）
+
+~/.kanban/boards/002-项目名/                       # 中心看板目录（结构同原项目内 .kanban）
   board.yml              看板配置（栏定义、order 栏归属、next-id、tasks 元数据）
   tasks/                 任务实体统一目录（永不移动、永不改名）
     0001-任务名/
@@ -69,7 +73,7 @@ kanban move 0001 ready
 
 > 实体集中在 `tasks/`，栏目录里的软链只是浏览用的视图。改进度用 `kanban move`（只改 board.yml + 迁软链，实体不动）；软链出错用 `kanban sync` 重建。
 >
-> **跨平台说明**：看板数据的真相源是 `tasks/` 实体 + `board.yml`，**不依赖软链**。栏软链只在 Linux/macOS 创建（作为目录浏览视图）；Windows 因普通用户无 symlink 权限会自动跳过软链，但所有 CLI 命令照常工作（详见下文「Windows 使用说明」）。
+> **跨平台说明**：看板数据的真相源是 `tasks/` 实体 + `board.yml`，**不依赖软链**。栏软链只在 Linux/macOS 创建（作为目录浏览视图）；Windows 因普通用户无 symlink 权限会自动跳过软链，但所有 CLI 命令照常工作（详见下文「Windows 使用说明」）。集中模式依赖 `.kanban` 软链本身，Windows 上建议使用 `--local` 分散模式。
 
 ## main.md 结构
 
@@ -93,7 +97,7 @@ kanban move 0001 ready
 
 | 命令 | 说明 |
 |---|---|
-| `kanban init [项目]` | 初始化看板（建 .kanban、默认四栏、board.yml，注册到全局 config） |
+| `kanban init [项目] [--local]` | 初始化看板（默认集中：数据建在 ~/.kanban/boards/<编号-项目名>/，项目 .kanban 留软链；`--local` 留在项目内） |
 | `kanban serve [--port]` | 启动 Web 服务（默认 38311） |
 | `kanban skill install` | 安装 Skill 到各 agent 的 skills 目录（默认探测本机已装的 agent 全装，软链到源）；详见下方「装 Skill 到多个 agent」 |
 | `kanban list [--column]` | 列出任务 |
@@ -107,6 +111,8 @@ kanban move 0001 ready
 | `kanban update [--no-run] <ID> <需求>` | 对任务追加补充需求（写入子任务，带 [补充] 标签）并重开到 doing；默认追加后立即执行，`--no-run` 只补需求不执行 |
 | `kanban progress <ID>` | 显示任务进度 |
 | `kanban sync` | 重建栏软链以对齐 board.yml（Linux/macOS）；Windows 下仅做 board.yml 自愈（孤儿归 backlog、清除幽灵 id） |
+| `kanban centralize [项目] [--all]` | 把项目 .kanban 整目录迁到 ~/.kanban/boards/<编号-项目名>/，原位留软链（幂等可重跑，自动补 .gitignore 软链忽略规则；`--all` 对全部注册项目执行） |
+| `kanban decentralize [项目] [--all]` | 逆向：中心看板迁回项目内真实目录，摘除软链（幂等） |
 | `kanban archive <ID>` | 存档任务（从看板隐藏，实体移入 .kanban/archive/，文档保留） |
 | `kanban delete <ID>` | 删除任务（实体目录，ID 不回收） |
 | `kanban projects [add|remove] [path]` | 管理全局项目列表 |
@@ -181,9 +187,9 @@ main.md → logs.md → design.md → plan.md → readme.md → notes.md → 其
 - `logs.md`（执行进展日志）：doing 栏任务打开详情时默认选中，文件变化时自动刷新并滚到底——执行中可准实时查看进度，完成后可回看全过程。
 - 其余文档为归档产物（详见 Skill 的「任务文档归档纪律」）。
 
-## 新会话自动询问挂看板（需手动配置 AGENTS.md）
+## 新会话自动挂看板（需手动配置 AGENTS.md）
 
-装好 Skill 后，智能体只有被 `/kanban` 相关输入触发时才会操作看板——你在新会话里直接派活时，它未必记得先挂看板。想让它在接到第一个实施型任务时**主动询问是否创建看板任务**，需要把下面这段规则加进 **AGENTS.md**：
+装好 Skill 后，智能体只有被 `/kanban` 相关输入触发时才会操作看板——你在新会话里直接派活时，它未必记得先挂看板。想让它在接到第一个实施型任务时**自动创建看板任务（不询问、不停顿）**，需要把下面这段规则加进 **AGENTS.md**：
 
 > ⚠️ **需人工添加**：安装 kanban（`npm install -g` + `kanban skill install`）**无法自动修改 AGENTS.md**——那属于你的智能体指令文件，工具不该也不去碰。装完后把这段内容人工复制进去，一次即可。
 
@@ -198,14 +204,14 @@ main.md → logs.md → design.md → plan.md → readme.md → notes.md → 其
 ## 看板任务挂载（所有项目）
 
 - 会话接到第一个**实施型任务**（会修改文件或多轮实施的工作；纯问答/查询/查看不算）时，先看项目根有无 `.kanban/` 目录：
-  - **有** → 动手前用 AskUserQuestion（无此工具则简短文本提问）问用户一次：「为本轮工作创建看板任务？」选项：创建（推荐）/ 不创建（本会话不再问）。选创建 → 执行 `/kanban create <标题>`（标题从指令提炼，可带一行描述），建完在任务下继续原工作。
+  - **有** → 不询问、不停顿，直接执行 `/kanban create <标题>`（标题从指令提炼，可带一行描述）为本轮工作建任务；建完提一句「已挂看板任务 <ID+标题>」，随即在任务下继续原工作。创建失败不阻塞原工作，说明原因后继续干活。
   - **无** → 什么都不说，直接干活。
-- 每会话最多问一次；用户拒绝后本会话不再提。
-- 会话本身以 /kanban 或看板任务开场（如 /kanban run）的不问。
-- 用户主动说「建任务 / 挂看板」时无需询问，直接执行。
+- 每会话最多自动建一次；会话内后续实施任务在既有任务下继续，不重复建（用户另有要求除外）。
+- 会话本身以 /kanban 或看板任务开场（如 /kanban run）的不建。
+- 用户明确说「不挂看板 / 别建任务」时不建，且本会话不再自动建。
 ```
 
-添加后的行为：会话接到第一个实施型任务（会修改文件或多轮实施；纯问答/查询不算）时，智能体先看项目根有无 `.kanban/`——有则动手前询问一次「为本轮工作创建看板任务？」，确认即 `/kanban create` 建任务并在其下继续工作；拒绝后本会话不再追问；无 `.kanban/` 的项目完全安静。
+添加后的行为：会话接到第一个实施型任务（会修改文件或多轮实施；纯问答/查询不算）时，智能体先看项目根有无 `.kanban/`——有则不询问、不停顿，直接 `/kanban create` 建任务并在其下继续工作（每会话最多自动建一次，建完提一句任务 ID；创建失败不阻塞原工作）；无 `.kanban/` 的项目完全安静。用户明确说「不挂看板 / 别建任务」即停，本会话不再自动建。
 
 规则的权威副本维护在 [skill/kanban/SKILL.md](skill/kanban/SKILL.md) 的「新会话挂看板全局约定」章节——将来调整这条约定时，记得把各处的 AGENTS.md 与该副本同步修改。
 
@@ -226,7 +232,7 @@ main.md → logs.md → design.md → plan.md → readme.md → notes.md → 其
 
 ```bash
 npm install -g auv-kanban
-kanban init
+kanban init --local   # Windows 无 symlink 权限，用本地分散模式（集中模式的 .kanban 软链在 Windows 上不可用）
 kanban serve
 ```
 

@@ -2,6 +2,16 @@
 
 本项目所有面向用户的版本变动记录。格式参考 [Keep a Changelog](https://keepachangelog.com/)。
 
+## [0.7.0] - 2026-11-12
+### Added
+- 看板数据集中管理：`kanban centralize [项目] [--all]` 把项目 `.kanban` 整目录迁移到 `~/.kanban/boards/<编号-项目名>/`，项目原位置只留一条软链——全机看板数据一处总览、一处备份；幂等可重跑，断链软链可自动修复，迁移时自动给项目 `.gitignore` 补软链忽略规则（带斜杠的 `.kanban/` 规则匹配不到软链文件）。
+- `kanban decentralize [项目] [--all]`：逆向迁移，把中心看板迁回项目内真实目录、摘除软链（幂等）。
+- `kanban init` 默认集中建板（数据直接落在 `~/.kanban/boards/`，项目 `.kanban` 为软链），`--local` 保留项目内分散形态；Windows 无 symlink 权限时自动降级本地模式。
+
+### Changed
+- 全局 `config.json` 的项目条目新增 `no` 编号字段（3 位，创建时分配冻结）与 `nextProjectNo` 分配游标；中心目录名 = 编号-项目名，项目改名不跟随改目录。
+- Web 实时刷新的文件监听根改为 realpath 解析后的真实目录，`.kanban` 为软链时照常监视中心内变化（`followSymlinks: false` 保留，任务内指向外部的软链仍不跟随）。
+
 ## [0.6.0] - 2026-09-14
 ### Added
 - 任务可设置到期日期、相关人、任务类型：在任务详情弹窗中编辑，卡片上直接显示（类型与相关人靠左，到期日期固定右对齐）。

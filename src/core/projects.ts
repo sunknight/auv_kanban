@@ -13,7 +13,14 @@ export function readGlobalConfig(): GlobalConfig {
   try {
     const raw = readFileSync(path, 'utf8');
     const parsed = JSON.parse(raw) as Partial<GlobalConfig>;
-    const projects = Array.isArray(parsed.projects) ? parsed.projects : [];
+    // 逐项归一化：no 仅接受 3 位及以上纯数字字符串（脏值视为未分配）
+    const projects: ProjectEntry[] = (Array.isArray(parsed.projects) ? parsed.projects : [])
+      .filter(p => p && typeof p.path === 'string')
+      .map(p => ({
+        path: p.path,
+        name: typeof p.name === 'string' ? p.name : basename(p.path),
+        ...(typeof p.no === 'string' && /^\d{3,}$/.test(p.no) ? { no: p.no } : {}),
+      }));
     let lastProject = typeof parsed.lastProject === 'string' ? parsed.lastProject : undefined;
     // 防御：lastProject 可能指向已被删除的项目。读取时顺手校验仍在 projects 内，失效则清空，避免脏值残留。
     if (lastProject && !projects.some(p => p.path === lastProject)) lastProject = undefined;
@@ -21,6 +28,7 @@ export function readGlobalConfig(): GlobalConfig {
       projects,
       defaultPort: typeof parsed.defaultPort === 'number' ? parsed.defaultPort : 38311,
       lastProject,
+      ...(typeof parsed.nextProjectNo === 'number' ? { nextProjectNo: parsed.nextProjectNo } : {}),
     };
   } catch {
     return defaultGlobalConfig();
@@ -109,4 +117,35 @@ export function setLastProject(projectPath: string): void {
 /** 读取最后打开的项目路径（可能为 undefined，或已被 readGlobalConfig 校验为失效）。 */
 export function getLastProject(): string | undefined {
   return readGlobalConfig().lastProject;
+}
+
+/** 现有项目编号的最大数值（无任何编号时为 0）。 */
+function maxProjectNo(projects: ProjectEntry[]): number {
+  let max = 0;
+  for (const p of projects) {
+    const n = p.no ? Number(p.no) : 0;
+    if (n > max) max = n;
+  }
+  return max;
+}
+
+/**
+ * 确保项目已分配编号（3 位字符串，如 "002"）。已有则原样返回；没有则分配
+ * （游标 nextProjectNo 优先，异常数据（游标 ≤ 现有最大值）时按最大值 + 1 兜底防撞号）、
+ * 写回 config 并返回。项目未注册时抛错。
+ */
+export function ensureProjectNo(projectPath: string): string {
+  const abs = resolve(projectPath);
+  const config = readGlobalConfig();
+  const entry = config.projects.find(p => p.path === abs);
+  if (!entry) throw new Error(`项目未注册：${abs}（请先 kanban init）`);
+  if (entry.no) return entry.no;
+  const max = maxProjectNo(config.projects);
+  const next = typeof config.nextProjectNo === 'number' && config.nextProjectNo > max
+    ? config.nextProjectNo
+    : max + 1;
+  entry.no = String(next).padStart(3, '0');
+  config.nextProjectNo = next + 1;
+  writeGlobalConfig(config);
+  return entry.no;
 }

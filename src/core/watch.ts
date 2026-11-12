@@ -1,12 +1,18 @@
 import chokidar from 'chokidar';
+import { realpathSync } from 'fs';
 import { kanbanDir } from './paths.js';
 
 /** 监听项目 .kanban 全树，任何变化触发回调（已去抖） */
 export function watchBoard(projectRoot: string, onChange: () => void): () => void {
-  const watcher = chokidar.watch(kanbanDir(projectRoot), {
+  let root = kanbanDir(projectRoot);
+  // .kanban 可能是指向 ~/.kanban/boards/ 的软链（集中管理）：chokidar 在 followSymlinks:false
+  // 下不会进入软链目录，须把监听根 realpath 成中心真实目录。
+  // 解析失败（断链/不存在）保持原路径：chokidar 会报 error，由下方 on('error') 吞掉，不打挂服务。
+  try { root = realpathSync(root); } catch { /* 保持原路径 */ }
+  const watcher = chokidar.watch(root, {
     ignoreInitial: true,
-    // 软链不跟随：栏位下的任务软链指向 ../tasks/（实体在监视根内，经 tasks/ 仍被直接监视）；
-    // 任务目录里若有指向看板外的软链，不跟随可防止监视越出 .kanban
+    // 软链不跟随：监听根已 realpath（集中时=中心真实目录，栏位下 ../tasks/ 软链的实体仍在其内、被直接监视）；
+    // 任务目录里若有指向看板外的软链，不跟随可防止监视越出看板目录
     // （曾跟随到 /tmp 里的 socket 文件，watch 报错打挂整个服务）。
     followSymlinks: false,
     awaitWriteFinish: { stabilityThreshold: 100, pollInterval: 50 },

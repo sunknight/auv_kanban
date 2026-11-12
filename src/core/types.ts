@@ -104,6 +104,8 @@ export interface Task {
 export interface ProjectEntry {
   path: string;
   name: string;
+  /** 项目编号（3 位字符串，如 "002"）：集中看板目录 ~/.kanban/boards/<no>-<name> 的前缀。创建时冻结，renameProject 不改它。缺省 = 尚未分配（ensureProjectNo 补齐）。 */
+  no?: string;
 }
 
 /** 全局 config.json */
@@ -112,4 +114,6 @@ export interface GlobalConfig {
   defaultPort: number;
   /** 最后打开的项目绝对路径（Web 刷新/重开时恢复用）。可能不存在/已失效，使用方需校验仍属 projects。 */
   lastProject?: string;
+  /** 项目编号分配游标（下一个可分配编号的数值）。缺省时按现有最大 no + 1 推导。 */
+  nextProjectNo?: number;
 }

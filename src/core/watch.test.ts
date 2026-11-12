@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
-import { mkdtempSync, rmSync, mkdirSync, writeFileSync, symlinkSync } from 'fs';
+import { mkdtempSync, rmSync, mkdirSync, writeFileSync, symlinkSync, renameSync, unlinkSync } from 'fs';
 import { tmpdir } from 'os';
 import { join } from 'path';
 import { initBoard } from './init-board.js';
@@ -53,5 +53,26 @@ describe('watch', () => {
       stop();
       expect(events.length).toBeGreaterThan(0);
     } finally { rmSync(outside, { recursive: true, force: true }); }
+  });
+
+  it('集中布局（.kanban 为指向中心的软链）下仍能监视中心内变化', async () => {
+    const events: string[] = [];
+    // 模拟 centralize 后布局：真实数据在中心目录，项目 .kanban 是软链
+    const center = mkdtempSync(join(tmpdir(), 'kb-center-'));
+    rmSync(join(center), { recursive: true, force: true });
+    renameSync(join(tmp, '.kanban'), center);
+    symlinkSync(center, join(tmp, '.kanban'));
+    try {
+      const stop = watchBoard(tmp, () => events.push('change'));
+      await new Promise(r => setTimeout(r, 300));
+      mkdirSync(join(center, 'tasks', '0001-y'), { recursive: true });
+      writeFileSync(join(center, 'tasks', '0001-y', 'main.md'), '# y'); // 中心内变化：应触发
+      await new Promise(r => setTimeout(r, 600));
+      stop();
+      expect(events.length).toBeGreaterThan(0);
+    } finally {
+      unlinkSync(join(tmp, '.kanban'));
+      renameSync(center, join(tmp, '.kanban')); // 还原，让 afterEach 正常清理
+    }
   });
 });

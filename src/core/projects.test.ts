@@ -2,7 +2,7 @@ import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { mkdtempSync, rmSync } from 'fs';
 import { tmpdir } from 'os';
 import { join } from 'path';
-import { listProjects, addProject, removeProject, renameProject, reorderProjects, readGlobalConfig, writeGlobalConfig, setLastProject, getLastProject } from './projects.js';
+import { listProjects, addProject, removeProject, renameProject, reorderProjects, readGlobalConfig, writeGlobalConfig, setLastProject, getLastProject, ensureProjectNo } from './projects.js';
 
 describe('projects', () => {
   let tmpHome: string;
@@ -159,6 +159,59 @@ describe('projects', () => {
       writeGlobalConfig(cfg);
       // 再次读取时应被清空（不在 projects 内）
       expect(getLastProject()).toBeUndefined();
+    });
+  });
+
+  describe('ensureProjectNo（项目编号分配）', () => {
+    it('未分配时分配 001 起始编号并写回', () => {
+      const proj = mkdtempSync(join(tmpdir(), 'proj-'));
+      addProject(proj);
+      expect(ensureProjectNo(proj)).toBe('001');
+      expect(readGlobalConfig().projects[0].no).toBe('001');
+      expect(readGlobalConfig().nextProjectNo).toBe(2);
+    });
+
+    it('已分配时幂等返回原编号，游标不前进', () => {
+      const proj = mkdtempSync(join(tmpdir(), 'proj-'));
+      addProject(proj);
+      ensureProjectNo(proj);
+      ensureProjectNo(proj);
+      const c = readGlobalConfig();
+      expect(c.projects[0].no).toBe('001');
+      expect(c.nextProjectNo).toBe(2);
+    });
+
+    it('多项目顺序分配递增编号', () => {
+      const p1 = mkdtempSync(join(tmpdir(), 'a-'));
+      const p2 = mkdtempSync(join(tmpdir(), 'b-'));
+      addProject(p1); addProject(p2);
+      expect(ensureProjectNo(p1)).toBe('001');
+      expect(ensureProjectNo(p2)).toBe('002');
+    });
+
+    it('游标异常（≤ 现有最大值）时按最大值 + 1 兜底防撞号', () => {
+      const p1 = mkdtempSync(join(tmpdir(), 'a-'));
+      const p2 = mkdtempSync(join(tmpdir(), 'b-'));
+      addProject(p1); addProject(p2);
+      ensureProjectNo(p1); // p1=001，游标=2
+      // 手工把游标写成 1（脏数据），分配 p2 时应兜底为 2
+      const cfg = readGlobalConfig();
+      cfg.nextProjectNo = 1;
+      writeGlobalConfig(cfg);
+      expect(ensureProjectNo(p2)).toBe('002');
+    });
+
+    it('项目未注册抛错', () => {
+      expect(() => ensureProjectNo('/no/such/project')).toThrow();
+    });
+
+    it('readGlobalConfig 对脏 no（非数字字符串）视为未分配', () => {
+      const proj = mkdtempSync(join(tmpdir(), 'proj-'));
+      addProject(proj);
+      const cfg = readGlobalConfig();
+      cfg.projects[0].no = 'abc';
+      writeGlobalConfig(cfg);
+      expect(readGlobalConfig().projects[0].no).toBeUndefined();
     });
   });
 });

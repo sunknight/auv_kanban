@@ -17,6 +17,7 @@ import { projectsCommand } from './cli/commands/projects.js';
 import { serveCommand } from './cli/commands/serve.js';
 import { skillCommand } from './cli/commands/skill.js';
 import { syncCommand } from './cli/commands/sync.js';
+import { centralizeCommand, decentralizeCommand } from './cli/commands/centralize.js';
 
 // 统一兜底：把 handler 抛出的用户级错误（如找不到 .kanban）输出为一行提示，
 // 而非 Node 默认的完整 stack trace。
@@ -40,6 +41,8 @@ try {
     .command(serveCommand)
     .command(skillCommand)
     .command(syncCommand)
+    .command(centralizeCommand)
+    .command(decentralizeCommand)
     .demandCommand(1)
     .strict()
     .parse();
